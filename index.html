@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sourcing Assistant</title>
+  <style>
+    :root {
+      --bg: #f2f2f7;
+      --surface: #ffffff;
+      --surface2: #f8f8fa;
+      --border: #e0e0e6;
+      --text: #1c1c1e;
+      --muted: #6e6e73;
+      --accent: #0071ce;
+      --accent-dim: #e8f2ff;
+      --red: #ff3b30;
+      --orange: #ff9500;
+      --green: #34c759;
+      --shadow-sm: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.1);
+      --r: 16px;
+      --r-sm: 10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255,255,255,0.82);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    .logo em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .header-spinner {
+      margin-left: auto;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .header-spinner.active { display: flex; }
+
+    .spin {
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Main ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+
+    /* ── Setup Panel ── */
+    .panel {
+      background: var(--surface);
+      border-radius: var(--r);
+      box-shadow: var(--shadow-sm);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 580px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .field input[type="text"],
+    .field input[type="number"] {
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--surface2);
+      outline: none;
+      transition: border-color 0.18s;
+    }
+
+    .field input:focus { border-color: var(--accent); }
+
+    /* ── File Drops ── */
+    .drop-zone {
+      position: relative;
+      border: 1.5px dashed var(--border);
+      border-radius: var(--r-sm);
+      padding: 18px 16px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--surface2);
+      transition: border-color 0.18s, background 0.18s;
+      min-height: 90px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .drop-zone:hover { border-color: var(--accent); background: var(--accent-dim); }
+    .drop-zone.over { border-color: var(--accent); background: var(--accent-dim); }
+    .drop-zone.loaded { border-color: var(--green); background: #f0fff5; border-style: solid; }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .drop-icon { font-size: 22px; line-height: 1; }
+    .drop-label { font-size: 13px; color: var(--muted); }
+    .drop-name { font-size: 13px; font-weight: 600; color: var(--green); }
+
+    /* ── Actions ── */
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn {
+      padding: 11px 22px;
+      border-radius: 100px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.96); }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-primary:disabled { opacity: 0.35; cursor: default; }
+
+    .btn-ghost {
+      background: none;
+      color: var(--muted);
+      border: 1.5px solid var(--border);
+      padding: 10px 18px;
+      font-size: 14px;
+    }
+
+    .btn-ghost:hover { border-color: var(--muted); color: var(--text); }
+
+    .btn-export {
+      background: none;
+      color: var(--accent);
+      border: 1.5px solid var(--accent-dim);
+      background: var(--accent-dim);
+      padding: 10px 18px;
+      font-size: 14px;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── Summary Bar ── */
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 480px) {
+      .summary-bar { grid-template-columns: 1fr 1fr; }
+    }
+
+    .stat-pill {
+      background: var(--surface);
+      border-radius: var(--r-sm);
+      box-shadow: var(--shadow-sm);
+      padding: 14px 16px;
+    }
+
+    .stat-pill-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+
+    .stat-pill-value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      flex: 1;
+    }
+
+    .sort-select {
+      padding: 8px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 100px;
+      font-size: 13px;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* ── Cards ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 16px;
+    }
+
+    @media (max-width: 340px) {
+      .cards-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--r);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      transition: box-shadow 0.22s, transform 0.22s;
+      opacity: 0;
+      animation: fadeUp 0.3s ease forwards;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Image zone */
+    .card-img {
+      position: relative;
+      height: 152px;
+      background: #f5f5f7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .card-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 10px;
+    }
+
+    .img-placeholder { font-size: 44px; opacity: 0.35; }
+
+    .badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 100px;
+      letter-spacing: 0.2px;
+    }
+
+    .badge-critical { background: var(--red); color: #fff; }
+    .badge-low      { background: var(--orange); color: #fff; }
+    .badge-ok       { background: var(--green); color: #fff; }
+
+    /* Card body */
+    .card-body { padding: 16px; }
+
+    .card-name {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 3px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-id {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'SF Mono', 'Courier New', monospace;
+      margin-bottom: 14px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-box {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 9px 10px;
+    }
+
+    .stat-box-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 2px;
+    }
+
+    .stat-box-value {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      line-height: 1;
+    }
+
+    .val-accent  { color: var(--accent); }
+    .val-red     { color: var(--red); }
+    .val-muted   { color: var(--muted); }
+
+    .sub { font-size: 10px; font-weight: 400; color: var(--muted); }
+
+    .card-footer {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .price-label { font-size: 12px; color: var(--muted); }
+    .price-value { font-size: 14px; font-weight: 600; }
+
+    /* ── Empty / Error States ── */
+    .empty {
+      text-align: center;
+      padding: 80px 24px;
+    }
+
+    .empty-icon { font-size: 52px; margin-bottom: 16px; opacity: 0.6; }
+
+    .empty h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .empty p {
+      font-size: 15px;
+      color: var(--muted);
+      max-width: 380px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ── Column Mapper ── */
+    .mapper-banner {
+      background: #fff8ec;
+      border: 1.5px solid #ffd280;
+      border-radius: var(--r-sm);
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #7a4f00;
+    }
+
+    .mapper-banner strong { display: block; margin-bottom: 6px; }
+
+    .mapper-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mapper-field { display: flex; flex-direction: column; gap: 4px; }
+
+    .mapper-field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .mapper-field select {
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+      outline: none;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1c1c1e;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 12px 20px;
+      border-radius: 100px;
+      z-index: 999;
+      pointer-events: none;
+      transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.32s;
+      white-space: nowrap;
+      max-width: 90vw;
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.err  { background: var(--red); }
+
+    /* ── Results section visibility ── */
+    #results { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">Sourcing <em>Assistant</em></div>
+    <div class="header-spinner" id="spinner">
+      <div class="spin"></div>
+      <span id="spinnerText">Loading…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ── Setup Panel ── -->
+  <div class="panel">
+    <div class="panel-title">Data Sources</div>
+
+    <div class="grid-2" style="margin-bottom:14px">
+      <div class="field">
+        <label>Google Sheet URL or ID</label>
+        <input type="text" id="sheetUrl" placeholder="Paste URL or Sheet ID" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Weeks of Stock to Keep</label>
+        <input type="number" id="weeksTarget" value="4" min="1" max="52">
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label>WFS Inventory Report</label>
+        <div class="drop-zone" id="wfsDrop">
+          <input type="file" accept=".csv" id="wfsFile">
+          <div class="drop-icon">📦</div>
+          <div class="drop-label">Drop CSV or tap to upload</div>
+          <div class="drop-name" id="wfsName"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Sellerboard Sales Data</label>
+        <div class="drop-zone" id="sbDrop">
+          <input type="file" accept=".csv" id="sbFile">
+          <div class="drop-icon">📊</div>
+          <div class="drop-label">Drop CSV or tap to upload</div>
+          <div class="drop-name" id="sbName"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="generateBtn">Generate Sourcing List</button>
+      <button class="btn btn-ghost" id="clearBtn">Clear</button>
+      <button class="btn btn-export" id="exportBtn" style="display:none">Export CSV</button>
+      <span class="hint" id="hintText">Requires at least one data source.</span>
+    </div>
+  </div>
+
+  <!-- ── WFS Column Mapper (shown if auto-detect fails) ── -->
+  <div id="wfsMapper" style="display:none" class="mapper-banner">
+    <strong>⚠️ Couldn't auto-detect WFS columns — please map them manually:</strong>
+    <div class="mapper-grid" id="wfsMapperGrid"></div>
+    <button class="btn btn-primary" style="margin-top:12px;font-size:13px;padding:8px 18px" id="applyMapper">Apply & Generate</button>
+  </div>
+
+  <!-- ── Results ── -->
+  <div id="results">
+    <div class="summary-bar" id="summaryBar"></div>
+    <div class="toolbar">
+      <div class="section-title" id="sectionTitle"></div>
+      <select class="sort-select" id="sortSelect">
+        <option value="stock-asc">Lowest Stock First</option>
+        <option value="buy-desc">Most to Buy First</option>
+        <option value="velocity-desc">Fastest Moving</option>
+        <option value="name-asc">Name A–Z</option>
+      </select>
+    </div>
+    <div class="cards-grid" id="cardsGrid"></div>
+  </div>
+
+  <!-- ── Empty State ── -->
+  <div class="empty" id="emptyState">
+    <div class="empty-icon">🛒</div>
+    <h3>Ready when you are</h3>
+    <p>Connect your Google Sheet, upload the WFS inventory and Sellerboard CSVs, then tap Generate.</p>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let wfsRows = null;   // raw parsed CSV rows
+let sbRows  = null;
+let items   = [];     // computed items
+let wfsColMap = {};   // manual column overrides
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function toast(msg, err = false) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+function setSpinner(on, text = 'Loading…') {
+  $('spinner').className = 'header-spinner' + (on ? ' active' : '');
+  $('spinnerText').textContent = text;
+  $('generateBtn').disabled = on;
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem('sa_sheet', $('sheetUrl').value);
+    localStorage.setItem('sa_weeks', $('weeksTarget').value);
+  } catch (_) {}
+}
+
+function loadPrefs() {
+  try {
+    const url = localStorage.getItem('sa_sheet');
+    const wks = localStorage.getItem('sa_weeks');
+    if (url) $('sheetUrl').value = url;
+    if (wks) $('weeksTarget').value = wks;
+  } catch (_) {}
+}
+
+// ─── CSV Parser ───────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  // Handle \r\n and \r line endings
+  const lines = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  if (lines.length < 2) return { headers: [], rows: [] };
+
+  function parseLine(line) {
+    const out = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (c === ',' && !inQ) {
+        out.push(cur.trim()); cur = '';
+      } else {
+        cur += c;
+      }
+    }
+    out.push(cur.trim());
+    return out;
+  }
+
+  const rawHeaders = parseLine(lines[0]);
+  const headers = rawHeaders.map(h =>
+    h.toLowerCase().replace(/^﻿/, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  );
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseLine(lines[i]);
+    if (vals.every(v => !v)) continue;
+    const row = {};
+    headers.forEach((h, j) => { row[h] = (vals[j] || '').trim(); });
+    rows.push(row);
+  }
+  return { headers: rawHeaders, headerKeys: headers, rows };
+}
+
+// ─── Column finder ────────────────────────────────────────────────────────────
+function findCol(sampleRow, candidates) {
+  const keys = Object.keys(sampleRow);
+  for (const c of candidates) {
+    const m = keys.find(k => k === c || k.includes(c));
+    if (m) return m;
+  }
+  return null;
+}
+
+function num(str) {
+  const n = parseFloat((str || '0').replace(/[$,\s]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+// ─── Google Sheets ────────────────────────────────────────────────────────────
+function extractSheetId(input) {
+  input = input.trim();
+  const m = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(input)) return input;
+  return null;
+}
+
+async function fetchSheet(sheetId) {
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Sheet fetch failed (HTTP ${res.status}). Make sure the sheet is shared: Anyone with the link → Viewer.`);
+  return res.text();
+}
+
+function parseSheetRows(rows) {
+  if (!rows.length) return new Map();
+  const s = rows[0];
+
+  const idCol    = findCol(s, ['item_id', 'itemid', 'item', 'sku', 'id', 'asin', 'upc']);
+  const nameCol  = findCol(s, ['product_name', 'name', 'title', 'description', 'product']);
+  const priceCol = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
+  const imgCol   = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
+
+  const map = new Map();
+  rows.forEach(row => {
+    const id = (row[idCol] || '').trim();
+    if (!id) return;
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], image: null });
+    const entry = map.get(id);
+    const name  = nameCol  ? (row[nameCol]  || '').trim() : '';
+    const price = priceCol ? num(row[priceCol]) : 0;
+    const img   = imgCol   ? (row[imgCol]   || '').trim() : '';
+    if (!entry.name && name) entry.name = name;
+    if (price > 0) entry.prices.push(price);
+    if (!entry.image && img) entry.image = img;
+  });
+  return map;
+}
+
+// ─── WFS Inventory ────────────────────────────────────────────────────────────
+const WFS_ID_HINTS    = ['item_id', 'itemid', 'sku', 'id', 'asin', 'upc', 'product_id', 'item'];
+const WFS_STOCK_HINTS = ['available', 'on_hand', 'fulfillable', 'current_stock', 'stock', 'qty', 'quantity', 'wfs_qty', 'units_available', 'sellable'];
+const WFS_INBOUND_HINTS = ['inbound', 'in_transit', 'incoming', 'pending', 'on_order', 'shipment', 'receiving', 'transit'];
+
+function parseWFSRows(rows, colMap = {}) {
+  if (!rows.length) return new Map();
+  const s = rows[0];
+
+  const idCol      = colMap.id      || findCol(s, WFS_ID_HINTS);
+  const stockCol   = colMap.stock   || findCol(s, WFS_STOCK_HINTS);
+  const inboundCol = colMap.inbound || findCol(s, WFS_INBOUND_HINTS);
+
+  // Surface ambiguity to user if we can't find stock/id
+  if (!idCol || !stockCol) {
+    return { __needsMapper: true, headers: rows.length ? Object.keys(rows[0]) : [] };
+  }
+
+  const map = new Map();
+  rows.forEach(row => {
+    const id = (row[idCol] || '').trim();
+    if (!id) return;
+    map.set(id, {
+      itemId: id,
+      currentStock: Math.round(num(row[stockCol])),
+      inbound: inboundCol ? Math.round(num(row[inboundCol])) : 0,
+    });
+  });
+  return map;
+}
+
+// ─── Sellerboard ──────────────────────────────────────────────────────────────
+function parseSBRows(rows) {
+  if (!rows.length) return new Map();
+  const s = rows[0];
+
+  const idCol  = findCol(s, ['item_id', 'itemid', 'sku', 'asin', 'id', 'product_id', 'item']);
+  const velCol = findCol(s, ['weekly', 'units_week', 'weekly_sold', 'units_sold', 'sold', 'velocity', 'avg', 'sales', 'units_per_week']);
+
+  const map = new Map();
+  rows.forEach(row => {
+    const id = (row[idCol] || '').trim();
+    if (!id) return;
+    map.set(id, { itemId: id, weeklySold: velCol ? num(row[velCol]) : 0 });
+  });
+  return map;
+}
+
+// ─── Merge & Compute ──────────────────────────────────────────────────────────
+function mergeData(sheetMap, invMap, velMap, weeksTarget) {
+  const allIds = new Set([
+    ...sheetMap.keys(),
+    ...invMap.keys(),
+    ...velMap.keys(),
+  ]);
+
+  const out = [];
+  allIds.forEach(id => {
+    const sheet = sheetMap.get(id) || { itemId: id, name: '', prices: [], image: null };
+    const inv   = invMap.get(id)   || { itemId: id, currentStock: 0, inbound: 0 };
+    const vel   = velMap.get(id)   || { itemId: id, weeklySold: 0 };
+
+    const prices    = sheet.prices;
+    const minPrice  = prices.length ? Math.min(...prices) : null;
+    const maxPrice  = prices.length ? Math.max(...prices) : null;
+    const weekly    = vel.weeklySold;
+    const parLevel  = Math.ceil(weekly * weeksTarget);
+    const onOrder   = inv.currentStock + inv.inbound;
+    const suggestBuy = Math.max(0, parLevel - onOrder);
+
+    let urgency;
+    if (inv.currentStock === 0 && inv.inbound === 0) urgency = 'critical';
+    else if (onOrder < parLevel * 0.5)               urgency = 'low';
+    else                                              urgency = 'ok';
+
+    out.push({
+      itemId: id,
+      name: sheet.name || ('Item ' + id),
+      currentStock: inv.currentStock,
+      inbound:      inv.inbound,
+      weekly,
+      parLevel,
+      suggestBuy,
+      minPrice,
+      maxPrice,
+      urgency,
+      image: sheet.image || null,   // prefilled from sheet; replaced by Walmart fetch if null
+    });
+  });
+
+  return out;
+}
+
+// ─── Sort ─────────────────────────────────────────────────────────────────────
+function sortItems(arr, mode) {
+  const a = [...arr];
+  switch (mode) {
+    case 'stock-asc':     return a.sort((x, y) => x.currentStock - y.currentStock);
+    case 'buy-desc':      return a.sort((x, y) => y.suggestBuy - x.suggestBuy);
+    case 'velocity-desc': return a.sort((x, y) => y.weekly - x.weekly);
+    case 'name-asc':      return a.sort((x, y) => x.name.localeCompare(y.name));
+    default:              return a;
+  }
+}
+
+// ─── Walmart Image Fetch ──────────────────────────────────────────────────────
+const imgCache = {};
+
+async function fetchWalmartImage(itemId) {
+  if (imgCache[itemId] !== undefined) return imgCache[itemId];
+  try {
+    const proxyUrl =
+      'https://api.allorigins.win/get?url=' +
+      encodeURIComponent('https://www.walmart.com/ip/' + itemId);
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(7000) });
+    if (!res.ok) { imgCache[itemId] = null; return null; }
+    const data = await res.json();
+    const html = data.contents || '';
+    // Try og:image first, then twitter:image
+    const patterns = [
+      /property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      /content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      /name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    ];
+    for (const p of patterns) {
+      const m = html.match(p);
+      if (m && m[1] && m[1].startsWith('http')) {
+        imgCache[itemId] = m[1];
+        return m[1];
+      }
+    }
+    imgCache[itemId] = null;
+    return null;
+  } catch {
+    imgCache[itemId] = null;
+    return null;
+  }
+}
+
+async function enrichImagesProgressively(itemsToFetch) {
+  const BATCH = 3;
+  const DELAY = 600;
+  for (let i = 0; i < itemsToFetch.length; i += BATCH) {
+    const batch = itemsToFetch.slice(i, i + BATCH);
+    await Promise.all(batch.map(async item => {
+      const img = await fetchWalmartImage(item.itemId);
+      item.image = img;
+      updateCardImage(item);
+    }));
+    if (i + BATCH < itemsToFetch.length) {
+      await new Promise(r => setTimeout(r, DELAY));
+    }
+  }
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function fmtPrice(p) { return p != null ? '$' + p.toFixed(2) : null; }
+
+function fmtPriceRange(min, max) {
+  if (min == null) return 'No history';
+  if (Math.abs(min - max) < 0.005) return fmtPrice(min);
+  return fmtPrice(min) + ' – ' + fmtPrice(max);
+}
+
+function imgTag(item) {
+  if (item.image) {
+    return `<img src="${escHtml(item.image)}" alt="" loading="lazy"
+              onerror="this.parentElement.innerHTML='<div class=\\'img-placeholder\\'>📦</div>'">`;
+  }
+  return '<div class="img-placeholder">📦</div>';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function badgeClass(u) {
+  return u === 'critical' ? 'badge-critical' : u === 'low' ? 'badge-low' : 'badge-ok';
+}
+
+function badgeLabel(u) {
+  return u === 'critical' ? 'Out of Stock' : u === 'low' ? 'Running Low' : 'In Stock';
+}
+
+function renderCard(item, delay = 0) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.dataset.id = item.itemId;
+  el.style.animationDelay = delay + 'ms';
+
+  const stockClass = item.currentStock === 0 ? 'val-red' : '';
+  const buyClass   = item.suggestBuy > 0 ? 'val-accent' : 'val-muted';
+
+  el.innerHTML = `
+    <div class="card-img">
+      ${imgTag(item)}
+      <div class="badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+    </div>
+    <div class="card-body">
+      <div class="card-name">${escHtml(item.name)}</div>
+      <div class="card-id">${escHtml(item.itemId)}</div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-label">In Stock</div>
+          <div class="stat-box-value ${stockClass}">${item.currentStock}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Inbound</div>
+          <div class="stat-box-value val-muted">${item.inbound}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Buy Now</div>
+          <div class="stat-box-value ${buyClass}">${item.suggestBuy}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Velocity</div>
+          <div class="stat-box-value">${item.weekly % 1 === 0 ? item.weekly : item.weekly.toFixed(1)}<span class="sub">/wk</span></div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span class="price-label">Typical buy price</span>
+        <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
+      </div>
+    </div>`;
+  return el;
+}
+
+function updateCardImage(item) {
+  const card = document.querySelector(`.card[data-id="${CSS.escape(item.itemId)}"]`);
+  if (!card) return;
+  const zone = card.querySelector('.card-img');
+  if (!zone) return;
+  const badge = zone.querySelector('.badge');
+  const badgeHtml = badge ? badge.outerHTML : '';
+  if (item.image) {
+    zone.innerHTML =
+      `<img src="${escHtml(item.image)}" alt="" loading="lazy"
+        onerror="this.parentElement.innerHTML='<div class=\\'img-placeholder\\'>📦</div>${badgeHtml.replace(/'/g,"\\'")}'">${badgeHtml}`;
+  }
+}
+
+function renderGrid(sortedItems) {
+  const grid = $('cardsGrid');
+  grid.innerHTML = '';
+  sortedItems.forEach((item, i) => {
+    grid.appendChild(renderCard(item, i * 35));
+  });
+}
+
+function renderSummary(all) {
+  const totalBuy = all.reduce((s, x) => s + x.suggestBuy, 0);
+  const nCritical = all.filter(x => x.urgency === 'critical').length;
+  const nLow      = all.filter(x => x.urgency === 'low').length;
+
+  $('summaryBar').innerHTML = `
+    <div class="stat-pill">
+      <div class="stat-pill-label">Total SKUs</div>
+      <div class="stat-pill-value">${all.length}</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-pill-label">Units to Buy</div>
+      <div class="stat-pill-value" style="color:var(--accent)">${totalBuy}</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-pill-label">Out of Stock</div>
+      <div class="stat-pill-value" style="color:var(--red)">${nCritical}</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-pill-label">Running Low</div>
+      <div class="stat-pill-value" style="color:var(--orange)">${nLow}</div>
+    </div>`;
+}
+
+// ─── Column Mapper UI ─────────────────────────────────────────────────────────
+function showMapper(headers) {
+  const grid = $('wfsMapperGrid');
+  const opts = ['(not present)', ...headers].map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+
+  grid.innerHTML = `
+    <div class="mapper-field">
+      <label>Item ID column</label>
+      <select id="mapId">${opts}</select>
+    </div>
+    <div class="mapper-field">
+      <label>Current Stock column</label>
+      <select id="mapStock">${opts}</select>
+    </div>
+    <div class="mapper-field">
+      <label>Inbound column</label>
+      <select id="mapInbound">${opts}</select>
+    </div>`;
+
+  $('wfsMapper').style.display = 'block';
+}
+
+function readMapper() {
+  const get = id => {
+    const el = $(id);
+    return el ? el.value : '';
+  };
+  const mapId      = get('mapId');
+  const mapStock   = get('mapStock');
+  const mapInbound = get('mapInbound');
+
+  // Convert display names back to normalized keys
+  function toKey(label) {
+    if (!label || label === '(not present)') return null;
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  }
+
+  return { id: toKey(mapId), stock: toKey(mapStock), inbound: toKey(mapInbound) };
+}
+
+// ─── Export CSV ───────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (!items.length) return;
+  const sorted = sortItems(items, $('sortSelect').value);
+  const rows = [['Item ID','Product Name','In Stock','Inbound','Buy Now','Velocity/wk','Par Level','Min Price','Max Price']];
+  sorted.forEach(item => {
+    rows.push([
+      item.itemId,
+      item.name,
+      item.currentStock,
+      item.inbound,
+      item.suggestBuy,
+      item.weekly,
+      item.parLevel,
+      item.minPrice != null ? item.minPrice.toFixed(2) : '',
+      item.maxPrice != null ? item.maxPrice.toFixed(2) : '',
+    ]);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `sourcing-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Main Generate ────────────────────────────────────────────────────────────
+async function generate(colMap = {}) {
+  const sheetInput  = $('sheetUrl').value.trim();
+  const weeksTarget = parseInt($('weeksTarget').value, 10) || 4;
+
+  if (!sheetInput && !wfsRows && !sbRows) {
+    toast('Add a Google Sheet URL and/or upload CSV files first.', true);
+    return;
+  }
+
+  savePrefs();
+  setSpinner(true, 'Fetching data…');
+  $('wfsMapper').style.display = 'none';
+
+  try {
+    // 1. Google Sheet
+    let sheetMap = new Map();
+    if (sheetInput) {
+      const sheetId = extractSheetId(sheetInput);
+      if (!sheetId) throw new Error('Invalid Google Sheet URL or ID.');
+      setSpinner(true, 'Fetching Google Sheet…');
+      const csv = await fetchSheet(sheetId);
+      const { rows } = parseCSV(csv);
+      sheetMap = parseSheetRows(rows);
+    }
+
+    // 2. WFS
+    let invMap = new Map();
+    if (wfsRows) {
+      const result = parseWFSRows(wfsRows, colMap);
+      if (result.__needsMapper) {
+        setSpinner(false);
+        showMapper(result.headers);
+        return;
+      }
+      invMap = result;
+    }
+
+    // 3. Sellerboard
+    let velMap = new Map();
+    if (sbRows) {
+      velMap = parseSBRows(sbRows);
+    }
+
+    if (!sheetMap.size && !invMap.size && !velMap.size) {
+      throw new Error('No data found. Check column names and file formats.');
+    }
+
+    setSpinner(true, 'Computing par levels…');
+    items = mergeData(sheetMap, invMap, velMap, weeksTarget);
+
+    // Show results
+    $('emptyState').style.display  = 'none';
+    $('results').style.display     = 'block';
+    $('exportBtn').style.display   = 'inline-flex';
+
+    renderSummary(items);
+    const sorted = sortItems(items, $('sortSelect').value);
+    $('sectionTitle').textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+    renderGrid(sorted);
+
+    setSpinner(false);
+    toast(`Loaded ${items.length} items`);
+
+    // Progressive image loading for items without sheet-provided images
+    const needsImg = sorted.filter(x => !x.image);
+    if (needsImg.length) enrichImagesProgressively(needsImg);
+
+  } catch (err) {
+    setSpinner(false);
+    toast(err.message, true);
+    console.error(err);
+  }
+}
+
+// ─── File Upload Setup ────────────────────────────────────────────────────────
+function setupDrop(dropId, inputId, nameId, onReady) {
+  const drop  = $(dropId);
+  const input = $(inputId);
+  const nameEl = $(nameId);
+
+  function handleFile(file) {
+    if (!file || !file.name.toLowerCase().endsWith('.csv')) {
+      toast('Please upload a .csv file.', true);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const { rows } = parseCSV(e.target.result);
+      onReady(rows);
+      nameEl.textContent = '✓ ' + file.name;
+      drop.classList.add('loaded');
+    };
+    reader.readAsText(file);
+  }
+
+  input.addEventListener('change', e => handleFile(e.target.files[0]));
+
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    handleFile(e.dataTransfer.files[0]);
+  });
+}
+
+// ─── Sort Change ──────────────────────────────────────────────────────────────
+function reSort() {
+  if (!items.length) return;
+  const sorted = sortItems(items, $('sortSelect').value);
+  renderGrid(sorted);
+  // Re-apply cached images
+  sorted.forEach(item => { if (item.image) updateCardImage(item); });
+}
+
+// ─── Clear ────────────────────────────────────────────────────────────────────
+function clearAll() {
+  wfsRows = null;
+  sbRows  = null;
+  items   = [];
+  wfsColMap = {};
+
+  ['wfsFile', 'sbFile'].forEach(id => { $(id).value = ''; });
+  ['wfsName', 'sbName'].forEach(id => { $(id).textContent = ''; });
+  ['wfsDrop', 'sbDrop'].forEach(id => { $(id).classList.remove('loaded'); });
+
+  $('results').style.display    = 'none';
+  $('wfsMapper').style.display  = 'none';
+  $('exportBtn').style.display  = 'none';
+  $('emptyState').style.display = 'block';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadPrefs();
+
+  setupDrop('wfsDrop', 'wfsFile', 'wfsName', rows => { wfsRows = rows; });
+  setupDrop('sbDrop',  'sbFile',  'sbName',  rows => { sbRows  = rows; });
+
+  $('generateBtn').addEventListener('click', () => generate());
+  $('clearBtn').addEventListener('click', clearAll);
+  $('exportBtn').addEventListener('click', exportCSV);
+  $('sortSelect').addEventListener('change', reSort);
+  $('applyMapper').addEventListener('click', () => generate(readMapper()));
+
+  $('sheetUrl').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+});
+</script>
+</body>
+</html>
