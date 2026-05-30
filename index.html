@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sourcing Assistant</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
     :root {
       --bg: #f2f2f7;
@@ -555,11 +556,11 @@
         </div>
       </div>
       <div class="field">
-        <label>Sellerboard Sales Data</label>
+        <label>Sales Data (Seller Center or Sellerboard)</label>
         <div class="drop-zone" id="sbDrop">
-          <input type="file" accept=".csv" id="sbFile">
+          <input type="file" accept=".csv,.xlsx" id="sbFile">
           <div class="drop-icon">📊</div>
-          <div class="drop-label">Drop CSV or tap to upload</div>
+          <div class="drop-label">Drop CSV or Excel file</div>
           <div class="drop-name" id="sbName"></div>
         </div>
       </div>
@@ -599,7 +600,7 @@
   <div class="empty" id="emptyState">
     <div class="empty-icon">🛒</div>
     <h3>Ready when you are</h3>
-    <p>Connect your Google Sheet, upload the WFS inventory and Sellerboard CSVs, then tap Generate.</p>
+    <p>Connect your Google Sheet, upload the WFS inventory and sales data, then tap Generate.</p>
   </div>
 </main>
 
@@ -711,8 +712,15 @@ function extractSheetId(input) {
   return null;
 }
 
-async function fetchSheet(sheetId) {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+function extractGid(input) {
+  input = input.trim();
+  const m = input.match(/[#&?]gid=([0-9]+)/);
+  return m ? m[1] : null;
+}
+
+async function fetchSheet(sheetId, gid) {
+  let url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+  if (gid) url += `&gid=${gid}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Sheet fetch failed (HTTP ${res.status}). Make sure the sheet is shared: Anyone with the link → Viewer.`);
   return res.text();
@@ -774,19 +782,80 @@ function parseWFSRows(rows, colMap = {}) {
   return map;
 }
 
-// ─── Sellerboard ──────────────────────────────────────────────────────────────
-function parseSBRows(rows) {
+// ─── Sales Data (Seller Center orders or Sellerboard) ────────────────────────
+function parseSalesRows(rows) {
   if (!rows.length) return new Map();
   const s = rows[0];
 
-  const idCol  = findCol(s, ['item_id', 'itemid', 'sku', 'asin', 'id', 'product_id', 'item']);
-  const velCol = findCol(s, ['weekly', 'units_week', 'weekly_sold', 'units_sold', 'sold', 'velocity', 'avg', 'sales', 'units_per_week']);
+  // Detect format: Seller Center order-level vs pre-aggregated weekly
+  const wmtIdCol   = findCol(s, ['wmt_item_id', 'item_id', 'itemid', 'walmart_item_id']);
+  const qtyCol     = findCol(s, ['quantity', 'qty', 'units']);
+  const dateCol    = findCol(s, ['order_placed_dt', 'order_date', 'date', 'placed_date']);
+  const statusCol  = findCol(s, ['order_status', 'status']);
+  const nameCol    = findCol(s, ['item_name', 'product_name', 'name', 'title', 'product']);
+  const velCol     = findCol(s, ['weekly', 'units_week', 'weekly_sold', 'velocity', 'units_per_week']);
 
-  const map = new Map();
+  // If there's a pre-aggregated weekly column, use simple mode
+  if (velCol && !dateCol) {
+    const idCol = wmtIdCol || findCol(s, ['sku', 'asin', 'id', 'product_id', 'item']);
+    const map = new Map();
+    rows.forEach(row => {
+      const id = (row[idCol] || '').trim();
+      if (!id) return;
+      map.set(id, { itemId: id, weeklySold: num(row[velCol]), name: nameCol ? (row[nameCol] || '').trim() : '' });
+    });
+    return map;
+  }
+
+  // Order-level aggregation mode (Seller Center)
+  const idCol = wmtIdCol || findCol(s, ['sku', 'asin', 'id', 'product_id', 'item']);
+  if (!idCol || !qtyCol) return new Map();
+
+  const CANCELLED = new Set(['cancelled', 'canceled', 'returned', 'refunded']);
+
+  const totals = new Map(); // itemId → { units, name, dates[] }
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
     if (!id) return;
-    map.set(id, { itemId: id, weeklySold: velCol ? num(row[velCol]) : 0 });
+
+    // Skip cancelled orders
+    const status = (row[statusCol] || '').toLowerCase().trim();
+    if (CANCELLED.has(status)) return;
+
+    const units = num(row[qtyCol]);
+    if (units <= 0) return;
+
+    const name = nameCol ? (row[nameCol] || '').trim() : '';
+
+    if (!totals.has(id)) totals.set(id, { units: 0, name: '', dates: [] });
+    const entry = totals.get(id);
+    entry.units += units;
+    if (!entry.name && name) entry.name = name;
+
+    if (dateCol && row[dateCol]) {
+      const d = new Date(row[dateCol]);
+      if (!isNaN(d)) entry.dates.push(d);
+    }
+  });
+
+  // Calculate date range across all orders for the denominator
+  let allDates = [];
+  totals.forEach(e => { allDates = allDates.concat(e.dates); });
+  let weeksInRange = 12; // fallback: assume 12 weeks if no dates
+  if (allDates.length >= 2) {
+    const minD = Math.min(...allDates.map(d => d.getTime()));
+    const maxD = Math.max(...allDates.map(d => d.getTime()));
+    const days = (maxD - minD) / (1000 * 60 * 60 * 24);
+    weeksInRange = Math.max(1, days / 7);
+  }
+
+  const map = new Map();
+  totals.forEach((entry, id) => {
+    map.set(id, {
+      itemId: id,
+      weeklySold: entry.units / weeksInRange,
+      name: entry.name,
+    });
   });
   return map;
 }
@@ -820,7 +889,7 @@ function mergeData(sheetMap, invMap, velMap, weeksTarget) {
 
     out.push({
       itemId: id,
-      name: sheet.name || ('Item ' + id),
+      name: sheet.name || vel.name || ('Item ' + id),
       currentStock: inv.currentStock,
       inbound:      inv.inbound,
       weekly,
@@ -1104,8 +1173,9 @@ async function generate(colMap = {}) {
     if (sheetInput) {
       const sheetId = extractSheetId(sheetInput);
       if (!sheetId) throw new Error('Invalid Google Sheet URL or ID.');
+      const gid = extractGid(sheetInput);
       setSpinner(true, 'Fetching Google Sheet…');
-      const csv = await fetchSheet(sheetId);
+      const csv = await fetchSheet(sheetId, gid);
       const { rows } = parseCSV(csv);
       sheetMap = parseSheetRows(rows);
     }
@@ -1122,10 +1192,10 @@ async function generate(colMap = {}) {
       invMap = result;
     }
 
-    // 3. Sellerboard
+    // 3. Sales data (Seller Center or Sellerboard)
     let velMap = new Map();
     if (sbRows) {
-      velMap = parseSBRows(sbRows);
+      velMap = parseSalesRows(sbRows);
     }
 
     if (!sheetMap.size && !invMap.size && !velMap.size) {
@@ -1166,18 +1236,45 @@ function setupDrop(dropId, inputId, nameId, onReady) {
   const nameEl = $(nameId);
 
   function handleFile(file) {
-    if (!file || !file.name.toLowerCase().endsWith('.csv')) {
-      toast('Please upload a .csv file.', true);
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    const isXlsx = name.endsWith('.xlsx') || name.endsWith('.xls');
+    const isCsv  = name.endsWith('.csv');
+    if (!isXlsx && !isCsv) {
+      toast('Please upload a .csv or .xlsx file.', true);
       return;
     }
+
     const reader = new FileReader();
-    reader.onload = e => {
-      const { rows } = parseCSV(e.target.result);
-      onReady(rows);
-      nameEl.textContent = '✓ ' + file.name;
-      drop.classList.add('loaded');
-    };
-    reader.readAsText(file);
+
+    if (isXlsx) {
+      reader.onload = e => {
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        // Normalize keys to match our CSV format (lowercase, underscores)
+        const rows = raw.map(r => {
+          const out = {};
+          Object.keys(r).forEach(k => {
+            const nk = k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+            out[nk] = String(r[k] ?? '').trim();
+          });
+          return out;
+        });
+        onReady(rows);
+        nameEl.textContent = '✓ ' + file.name;
+        drop.classList.add('loaded');
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.onload = e => {
+        const { rows } = parseCSV(e.target.result);
+        onReady(rows);
+        nameEl.textContent = '✓ ' + file.name;
+        drop.classList.add('loaded');
+      };
+      reader.readAsText(file);
+    }
   }
 
   input.addEventListener('change', e => handleFile(e.target.files[0]));
