@@ -730,15 +730,80 @@ async function fetchSheet(sheetId, gid) {
   return res.text();
 }
 
-function parseSheetRows(rows) {
+function parseSheetCSVText(csvText) {
+  const lines = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+  function parseLine(line) {
+    const out = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (c === ',' && !inQ) { out.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+    out.push(cur.trim());
+    return out;
+  }
+
+  const allRows = lines.map(parseLine);
+
+  // Scan for the actual header row containing "Item ID"
+  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, imgCol = -1;
+
+  for (let i = 0; i < allRows.length; i++) {
+    const row = allRows[i];
+    for (let j = 0; j < row.length; j++) {
+      if (/^item\s*id$/i.test(row[j].trim())) {
+        headerIdx = i;
+        idCol = j;
+        row.forEach((h, k) => {
+          const hn = h.trim().toLowerCase();
+          if (/^(item|product name|product|name|title)$/.test(hn)) nameCol = k;
+          if (/^cost$|^price$|^buy.?price$|^purchase.?price$/.test(hn)) priceCol = k;
+          if (/^image.?url$|^image$|^img$|^photo$/.test(hn)) imgCol = k;
+        });
+        break;
+      }
+    }
+    if (headerIdx !== -1) break;
+  }
+
+  // Fall back: try first row as header using regular key-based method
+  if (headerIdx === -1) {
+    const { rows } = parseCSV(csvText);
+    return parseSheetRowsFallback(rows);
+  }
+
+  const map = new Map();
+  for (let i = headerIdx + 1; i < allRows.length; i++) {
+    const row = allRows[i];
+    const id = (row[idCol] || '').trim();
+    if (!id || !/^\d+$/.test(id)) continue;
+
+    const rawName = nameCol >= 0 ? (row[nameCol] || '').trim() : '';
+    const name = rawName.replace(/\s*\(exp[^)]*\)/gi, '').trim();
+    const price = priceCol >= 0 ? num(row[priceCol]) : 0;
+    const img   = imgCol   >= 0 ? (row[imgCol] || '').trim() : '';
+
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], image: null });
+    const entry = map.get(id);
+    if (!entry.name && name) entry.name = name;
+    if (price > 0) entry.prices.push(price);
+    if (!entry.image && img) entry.image = img;
+  }
+  return map;
+}
+
+function parseSheetRowsFallback(rows) {
   if (!rows.length) return new Map();
   const s = rows[0];
-
   const idCol    = findCol(s, ['item_id', 'itemid', 'item', 'sku', 'id', 'asin', 'upc']);
   const nameCol  = findCol(s, ['product_name', 'name', 'title', 'description', 'product']);
   const priceCol = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
   const imgCol   = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
-
   const map = new Map();
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
@@ -1196,8 +1261,7 @@ async function generate(colMap = {}) {
       const gid = extractGid(sheetInput);
       setSpinner(true, 'Fetching Google Sheet…');
       const csv = await fetchSheet(sheetId, gid);
-      const { rows } = parseCSV(csv);
-      sheetMap = parseSheetRows(rows);
+      sheetMap = parseSheetCSVText(csv);
     }
 
     // 2. WFS
