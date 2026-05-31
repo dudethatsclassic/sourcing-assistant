@@ -639,13 +639,17 @@ function savePrefs() {
   } catch (_) {}
 }
 
+const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1_1JjkqHvl2Qh5Toa2GLQTR-aHKjbgWyQ7zTf85mRPMM/edit?gid=1570573297#gid=1570573297';
+
 function loadPrefs() {
   try {
-    const url = localStorage.getItem('sa_sheet');
+    const url = localStorage.getItem('sa_sheet') || DEFAULT_SHEET_URL;
     const wks = localStorage.getItem('sa_weeks');
     if (url) $('sheetUrl').value = url;
     if (wks) $('weeksTarget').value = wks;
-  } catch (_) {}
+  } catch (_) {
+    $('sheetUrl').value = DEFAULT_SHEET_URL;
+  }
 }
 
 // ─── CSV Parser ───────────────────────────────────────────────────────────────
