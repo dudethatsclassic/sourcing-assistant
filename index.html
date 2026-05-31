@@ -326,6 +326,38 @@
       color: var(--text);
     }
 
+    .search-input {
+      padding: 7px 12px 7px 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      width: 200px;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-mid);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-wrap .search-icon {
+      position: absolute;
+      left: 9px;
+      font-size: 13px;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
     .sort-select {
       padding: 7px 12px;
       border: 1px solid var(--border);
@@ -900,6 +932,10 @@
     <div class="toolbar">
       <div class="section-title" id="sectionTitle"></div>
       <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" class="search-input" id="searchInput" placeholder="Search SKUs…" autocomplete="off">
+      </div>
       <select class="sort-select" id="sortSelect">
         <option value="stock-asc">Lowest Stock First</option>
         <option value="buy-desc">Most to Buy First</option>
@@ -1132,6 +1168,7 @@ let wfsColMap = {};   // manual column overrides
 let storeTags = {};   // { itemId: [storeName] }
 let archivedIds = new Set(); // item IDs hidden from view
 let showArchived = false;    // toggle to reveal archived cards
+let searchQuery  = '';       // active search string
 let activeFilter = null;  // currently selected store filter
 let editingItemId = null; // item being tagged
 
@@ -1704,6 +1741,12 @@ function renderGrid(sortedItems) {
     ? sortedItems.filter(x => (storeTags[x.itemId] || []).includes(activeFilter))
     : sortedItems;
   if (!showArchived) visible = visible.filter(x => !archivedIds.has(x.itemId));
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    visible = visible.filter(x =>
+      x.name.toLowerCase().includes(q) || x.itemId.includes(q)
+    );
+  }
   const grid = $('cardsGrid');
   grid.innerHTML = '';
   visible.forEach((item, i) => {
@@ -2158,6 +2201,8 @@ function clearAll() {
   $('wfsMapper').style.display  = 'none';
   $('exportBtn').style.display  = 'none';
   $('emptyState').style.display = 'block';
+  $('searchInput').value = '';
+  searchQuery = '';
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -2182,6 +2227,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('sheetUrl').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
   $('storeTextInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmStoreTag(); });
+  $('searchInput').addEventListener('input', e => {
+    searchQuery = e.target.value.trim();
+    if (items.length) renderGrid(sortItems(items, $('sortSelect').value));
+  });
 });
 </script>
 </body>
