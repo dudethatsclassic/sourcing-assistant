@@ -500,8 +500,8 @@
     .store-tag-btn {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
+      gap: 5px;
+      padding: 5px 10px;
       border-radius: 100px;
       font-size: 12px;
       font-weight: 600;
@@ -533,7 +533,10 @@
     }
 
     .filter-chip {
-      padding: 7px 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
       border-radius: 100px;
       font-size: 13px;
       font-weight: 600;
@@ -610,7 +613,10 @@
     }
 
     .quick-pick {
-      padding: 6px 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
       border-radius: 100px;
       font-size: 13px;
       font-weight: 500;
@@ -642,6 +648,31 @@
     }
 
     .store-text-input:focus { border-color: var(--accent); }
+
+    .current-store-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 5px 10px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .current-store-chip button {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      opacity: 0.7;
+    }
+
+    .current-store-chip button:hover { opacity: 1; }
 
     .sheet-actions {
       display: flex;
@@ -777,13 +808,14 @@
 <div class="store-sheet" id="storeSheet">
   <div class="sheet-handle"></div>
   <div class="sheet-item-name" id="sheetItemName"></div>
+  <div id="sheetCurrentTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:0"></div>
   <div class="quick-picks" id="quickPicks"></div>
   <div class="store-input-row">
-    <input type="text" class="store-text-input" id="storeTextInput" placeholder="Type store name…">
-    <button class="btn btn-primary" onclick="confirmStoreTag()">Save</button>
+    <input type="text" class="store-text-input" id="storeTextInput" placeholder="Add a store…">
+    <button class="btn btn-primary" onclick="confirmStoreTag()">Add</button>
   </div>
   <div class="sheet-actions">
-    <button class="btn btn-ghost btn-remove" onclick="removeStoreTag()">Remove tag</button>
+    <button class="btn btn-ghost btn-remove" onclick="removeStoreTag()">Remove all</button>
   </div>
 </div>
 
@@ -793,6 +825,64 @@
 'use strict';
 
 // ─── JSONBin (store tags sync) ────────────────────────────────────────────────
+// ─── Store Logo Map ───────────────────────────────────────────────────────────
+const STORE_DOMAINS = {
+  'target':           'target.com',
+  'walmart':          'walmart.com',
+  'big lots':         'biglots.com',
+  'biglots':          'biglots.com',
+  'dollar general':   'dollargeneral.com',
+  'dollar tree':      'dollartree.com',
+  'five below':       'fivebelow.com',
+  'aldi':             'aldi.us',
+  'cvs':              'cvs.com',
+  'walgreens':        'walgreens.com',
+  'kroger':           'kroger.com',
+  'publix':           'publix.com',
+  'costco':           'costco.com',
+  "sam's club":       'samsclub.com',
+  'sams club':        'samsclub.com',
+  'home depot':       'homedepot.com',
+  "lowe's":           'lowes.com',
+  'lowes':            'lowes.com',
+  'tjmaxx':           'tjmaxx.com',
+  'tj maxx':          'tjmaxx.com',
+  'marshalls':        'marshalls.com',
+  'homegoods':        'homegoods.com',
+  'home goods':       'homegoods.com',
+  'ross':             'rossstores.com',
+  "ollie's":          'ollies.com',
+  'ollies':           'ollies.com',
+  'tuesday morning':  'tuesdaymorning.com',
+  'food lion':        'foodlion.com',
+  'winn-dixie':       'winndixie.com',
+  'winn dixie':       'winndixie.com',
+  'piggly wiggly':    'pigglywigglyal.com',
+  'grocery outlet':   'groceryoutlet.com',
+  'meijer':           'meijer.com',
+  'h-e-b':            'heb.com',
+  'heb':              'heb.com',
+  'trader joe\'s':    'traderjoes.com',
+  'trader joes':      'traderjoes.com',
+  'whole foods':      'wholefoodsmarket.com',
+  'sprouts':          'sprouts.com',
+  'shoprite':         'shoprite.com',
+  'stop & shop':      'stopandshop.com',
+  'giant':            'giantfood.com',
+  'safeway':          'safeway.com',
+};
+
+function getStoreLogo(name) {
+  const domain = STORE_DOMAINS[name.toLowerCase().trim()];
+  return domain ? `https://logo.clearbit.com/${domain}` : null;
+}
+
+function storeLogoImg(name, size = 16) {
+  const url = getStoreLogo(name);
+  if (!url) return '';
+  return `<img src="${url}" style="width:${size}px;height:${size}px;border-radius:3px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`;
+}
+
 const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/6a1c7f3cddf5aa59f77c95a9';
 const JSONBIN_KEY = '$2a$10$BcDWdgwfihwP/01f64ZXlOcF6zHcSSdC..Uh80lZ8jyulxqA8zRmS';
 
@@ -802,7 +892,13 @@ async function loadStoreTags() {
       headers: { 'X-Master-Key': JSONBIN_KEY }
     });
     const data = await res.json();
-    return data.record?.tags || {};
+    const raw = data.record?.tags || {};
+    // Migrate old single-string format to array format
+    const migrated = {};
+    Object.entries(raw).forEach(([id, val]) => {
+      migrated[id] = Array.isArray(val) ? val : [val];
+    });
+    return migrated;
   } catch { return {}; }
 }
 
@@ -1344,10 +1440,16 @@ function renderCard(item, delay = 0) {
 }
 
 function storeTagBtn(itemId) {
-  const store = storeTags[itemId];
-  return store
-    ? `<button class="store-tag-btn store-tag-set" onclick="openStoreSheet('${escHtml(itemId)}')">📍 ${escHtml(store)}</button>`
-    : `<button class="store-tag-btn store-tag-empty" onclick="openStoreSheet('${escHtml(itemId)}')">+ Add store</button>`;
+  const stores = storeTags[itemId];
+  if (stores && stores.length) {
+    return `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">` +
+      stores.map(s =>
+        `<button class="store-tag-btn store-tag-set" onclick="openStoreSheet('${escHtml(itemId)}')">${storeLogoImg(s)} ${escHtml(s)}</button>`
+      ).join('') +
+      `<button class="store-tag-btn store-tag-empty" onclick="openStoreSheet('${escHtml(itemId)}')">+</button>` +
+    `</div>`;
+  }
+  return `<button class="store-tag-btn store-tag-empty" onclick="openStoreSheet('${escHtml(itemId)}')">+ Add store</button>`;
 }
 
 function updateCardImage(item) {
@@ -1368,7 +1470,7 @@ function updateCardImage(item) {
 
 function renderGrid(sortedItems) {
   const visible = activeFilter
-    ? sortedItems.filter(x => storeTags[x.itemId] === activeFilter)
+    ? sortedItems.filter(x => (storeTags[x.itemId] || []).includes(activeFilter))
     : sortedItems;
   const grid = $('cardsGrid');
   grid.innerHTML = '';
@@ -1380,13 +1482,13 @@ function renderGrid(sortedItems) {
 
 // ─── Store Filter Chips ────────────────────────────────────────────────────────
 function renderFilterChips() {
-  const stores = [...new Set(Object.values(storeTags))].filter(Boolean).sort();
+  const stores = [...new Set(Object.values(storeTags).flat())].filter(Boolean).sort();
   const bar = $('storeFilters');
   if (!stores.length) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = ['All', ...stores].map(s =>
     `<button class="filter-chip${(!activeFilter && s === 'All') || activeFilter === s ? ' active' : ''}"
-       onclick="setFilter(${s === 'All' ? 'null' : `'${escHtml(s)}'`})">${escHtml(s)}</button>`
+       onclick="setFilter(${s === 'All' ? 'null' : `'${escHtml(s)}'`})">${s !== 'All' ? storeLogoImg(s, 14) + ' ' : ''}${escHtml(s)}</button>`
   ).join('');
 }
 
@@ -1401,17 +1503,31 @@ function openStoreSheet(itemId) {
   editingItemId = itemId;
   const item = items.find(x => x.itemId === itemId);
   $('sheetItemName').textContent = item ? item.name : itemId;
-  $('storeTextInput').value = storeTags[itemId] || '';
+  $('storeTextInput').value = '';
+  renderSheetCurrentTags();
 
-  // Quick picks from existing stores
-  const stores = [...new Set(Object.values(storeTags))].filter(Boolean).sort();
-  $('quickPicks').innerHTML = stores.map(s =>
-    `<button class="quick-pick" onclick="pickStore('${escHtml(s)}')">${escHtml(s)}</button>`
+  // Quick picks: all known stores not already on this item
+  const current = storeTags[itemId] || [];
+  const allStores = [...new Set(Object.values(storeTags).flat())].filter(Boolean).sort();
+  const available = allStores.filter(s => !current.includes(s));
+  $('quickPicks').innerHTML = available.map(s =>
+    `<button class="quick-pick" onclick="pickStore('${escHtml(s)}')">${storeLogoImg(s, 14)} ${escHtml(s)}</button>`
   ).join('');
 
   $('sheetOverlay').classList.add('open');
   $('storeSheet').classList.add('open');
   setTimeout(() => $('storeTextInput').focus(), 320);
+}
+
+function renderSheetCurrentTags() {
+  const current = storeTags[editingItemId] || [];
+  // Reuse quickPicks area for current tags if we add a dedicated element,
+  // but show them above the picks using the item name area
+  const existing = $('sheetCurrentTags');
+  if (!existing) return;
+  existing.innerHTML = current.map(s =>
+    `<span class="current-store-chip">${storeLogoImg(s, 15)} ${escHtml(s)} <button onclick="removeOneStoreTag('${escHtml(s)}')">×</button></span>`
+  ).join('');
 }
 
 function closeStoreSheet() {
@@ -1429,12 +1545,34 @@ function confirmStoreTag() {
   if (!editingItemId) return;
   const name = $('storeTextInput').value.trim();
   if (!name) return;
-  storeTags[editingItemId] = name;
+  if (!storeTags[editingItemId]) storeTags[editingItemId] = [];
+  if (!storeTags[editingItemId].includes(name)) {
+    storeTags[editingItemId].push(name);
+    saveStoreTags();
+    refreshCardStore(editingItemId);
+    renderFilterChips();
+    toast('Store added');
+  }
+  $('storeTextInput').value = '';
+  renderSheetCurrentTags();
+  // Refresh quick picks
+  const current = storeTags[editingItemId] || [];
+  const allStores = [...new Set(Object.values(storeTags).flat())].filter(Boolean).sort();
+  $('quickPicks').innerHTML = allStores.filter(s => !current.includes(s)).map(s =>
+    `<button class="quick-pick" onclick="pickStore('${escHtml(s)}')">${storeLogoImg(s, 14)} ${escHtml(s)}</button>`
+  ).join('');
+}
+
+function removeOneStoreTag(store) {
+  if (!editingItemId) return;
+  const arr = storeTags[editingItemId] || [];
+  storeTags[editingItemId] = arr.filter(s => s !== store);
+  if (!storeTags[editingItemId].length) delete storeTags[editingItemId];
   saveStoreTags();
   refreshCardStore(editingItemId);
   renderFilterChips();
-  closeStoreSheet();
-  toast('Store saved');
+  renderSheetCurrentTags();
+  toast('Store removed');
 }
 
 function removeStoreTag() {
@@ -1444,7 +1582,7 @@ function removeStoreTag() {
   refreshCardStore(editingItemId);
   renderFilterChips();
   closeStoreSheet();
-  toast('Tag removed');
+  toast('All stores removed');
 }
 
 function refreshCardStore(itemId) {
