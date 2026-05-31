@@ -1131,17 +1131,19 @@ function renderCard(item, delay = 0) {
 }
 
 function updateCardImage(item) {
+  if (!item.image) return;
   const card = document.querySelector(`.card[data-id="${CSS.escape(item.itemId)}"]`);
   if (!card) return;
   const zone = card.querySelector('.card-img');
   if (!zone) return;
-  const badge = zone.querySelector('.badge');
-  const badgeHtml = badge ? badge.outerHTML : '';
-  if (item.image) {
-    zone.innerHTML =
-      `<img src="${escHtml(item.image)}" alt="" loading="lazy"
-        onerror="this.parentElement.innerHTML='<div class=\\'img-placeholder\\'>📦</div>${badgeHtml.replace(/'/g,"\\'")}'">${badgeHtml}`;
-  }
+  const placeholder = zone.querySelector('.img-placeholder');
+  if (!placeholder) return; // already has an image
+  const img = document.createElement('img');
+  img.src = item.image;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.onerror = () => img.remove();
+  placeholder.replaceWith(img);
 }
 
 function renderGrid(sortedItems) {
