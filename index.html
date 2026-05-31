@@ -490,6 +490,173 @@
       outline: none;
     }
 
+    /* ── Store Tag on Card ── */
+    .card-store {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .store-tag-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+
+    .store-tag-btn:active { opacity: 0.7; }
+
+    .store-tag-set {
+      background: #e8f2ff;
+      color: var(--accent);
+    }
+
+    .store-tag-empty {
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1.5px dashed var(--border);
+    }
+
+    /* ── Store Filter Chips ── */
+    .store-filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .filter-chip {
+      padding: 7px 16px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+
+    .filter-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* ── Bottom Sheet ── */
+    .sheet-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+
+    .sheet-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .store-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      padding: 12px 20px 36px;
+      z-index: 201;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .store-sheet.open { transform: translateY(0); }
+
+    .sheet-handle {
+      width: 36px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 0 auto 16px;
+    }
+
+    .sheet-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .quick-picks {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .quick-pick {
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      cursor: pointer;
+      font-family: inherit;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+
+    .quick-pick:hover { border-color: var(--accent); color: var(--accent); }
+
+    .store-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .store-text-input {
+      flex: 1;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      background: var(--surface2);
+    }
+
+    .store-text-input:focus { border-color: var(--accent); }
+
+    .sheet-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-remove {
+      background: none;
+      color: var(--red);
+      border: 1.5px solid #ffe0de;
+      padding: 10px 16px;
+      font-size: 14px;
+      margin-left: auto;
+    }
+
     /* ── Toast ── */
     .toast {
       position: fixed;
@@ -584,6 +751,7 @@
   <!-- ── Results ── -->
   <div id="results">
     <div class="summary-bar" id="summaryBar"></div>
+    <div class="store-filters" id="storeFilters"></div>
     <div class="toolbar">
       <div class="section-title" id="sectionTitle"></div>
       <select class="sort-select" id="sortSelect">
@@ -604,16 +772,58 @@
   </div>
 </main>
 
+<!-- ── Store Sheet ── -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeStoreSheet()"></div>
+<div class="store-sheet" id="storeSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-item-name" id="sheetItemName"></div>
+  <div class="quick-picks" id="quickPicks"></div>
+  <div class="store-input-row">
+    <input type="text" class="store-text-input" id="storeTextInput" placeholder="Type store name…">
+    <button class="btn btn-primary" onclick="confirmStoreTag()">Save</button>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost btn-remove" onclick="removeStoreTag()">Remove tag</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 'use strict';
+
+// ─── JSONBin (store tags sync) ────────────────────────────────────────────────
+const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/6a1c7f3cddf5aa59f77c95a9';
+const JSONBIN_KEY = '$2a$10$BcDWdgwfihwP/01f64ZXlOcF6zHcSSdC..Uh80lZ8jyulxqA8zRmS';
+
+async function loadStoreTags() {
+  try {
+    const res = await fetch(JSONBIN_URL + '/latest', {
+      headers: { 'X-Master-Key': JSONBIN_KEY }
+    });
+    const data = await res.json();
+    return data.record?.tags || {};
+  } catch { return {}; }
+}
+
+async function saveStoreTags() {
+  try {
+    await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
+      body: JSON.stringify({ tags: storeTags })
+    });
+  } catch (e) { console.error('Tag save failed', e); }
+}
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let wfsRows = null;   // raw parsed CSV rows
 let sbRows  = null;
 let items   = [];     // computed items
 let wfsColMap = {};   // manual column overrides
+let storeTags = {};   // { itemId: storeName }
+let activeFilter = null;  // currently selected store filter
+let editingItemId = null; // item being tagged
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -1126,8 +1336,18 @@ function renderCard(item, delay = 0) {
         <span class="price-label">Typical buy price</span>
         <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
       </div>
+      <div class="card-store">
+        ${storeTagBtn(item.itemId)}
+      </div>
     </div>`;
   return el;
+}
+
+function storeTagBtn(itemId) {
+  const store = storeTags[itemId];
+  return store
+    ? `<button class="store-tag-btn store-tag-set" onclick="openStoreSheet('${escHtml(itemId)}')">📍 ${escHtml(store)}</button>`
+    : `<button class="store-tag-btn store-tag-empty" onclick="openStoreSheet('${escHtml(itemId)}')">+ Add store</button>`;
 }
 
 function updateCardImage(item) {
@@ -1147,11 +1367,91 @@ function updateCardImage(item) {
 }
 
 function renderGrid(sortedItems) {
+  const visible = activeFilter
+    ? sortedItems.filter(x => storeTags[x.itemId] === activeFilter)
+    : sortedItems;
   const grid = $('cardsGrid');
   grid.innerHTML = '';
-  sortedItems.forEach((item, i) => {
+  visible.forEach((item, i) => {
     grid.appendChild(renderCard(item, i * 35));
   });
+  $('sectionTitle').textContent = `${visible.length} item${visible.length !== 1 ? 's' : ''}${activeFilter ? ' · ' + activeFilter : ''}`;
+}
+
+// ─── Store Filter Chips ────────────────────────────────────────────────────────
+function renderFilterChips() {
+  const stores = [...new Set(Object.values(storeTags))].filter(Boolean).sort();
+  const bar = $('storeFilters');
+  if (!stores.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = ['All', ...stores].map(s =>
+    `<button class="filter-chip${(!activeFilter && s === 'All') || activeFilter === s ? ' active' : ''}"
+       onclick="setFilter(${s === 'All' ? 'null' : `'${escHtml(s)}'`})">${escHtml(s)}</button>`
+  ).join('');
+}
+
+function setFilter(store) {
+  activeFilter = store;
+  renderFilterChips();
+  renderGrid(sortItems(items, $('sortSelect').value));
+}
+
+// ─── Store Sheet ──────────────────────────────────────────────────────────────
+function openStoreSheet(itemId) {
+  editingItemId = itemId;
+  const item = items.find(x => x.itemId === itemId);
+  $('sheetItemName').textContent = item ? item.name : itemId;
+  $('storeTextInput').value = storeTags[itemId] || '';
+
+  // Quick picks from existing stores
+  const stores = [...new Set(Object.values(storeTags))].filter(Boolean).sort();
+  $('quickPicks').innerHTML = stores.map(s =>
+    `<button class="quick-pick" onclick="pickStore('${escHtml(s)}')">${escHtml(s)}</button>`
+  ).join('');
+
+  $('sheetOverlay').classList.add('open');
+  $('storeSheet').classList.add('open');
+  setTimeout(() => $('storeTextInput').focus(), 320);
+}
+
+function closeStoreSheet() {
+  $('sheetOverlay').classList.remove('open');
+  $('storeSheet').classList.remove('open');
+  editingItemId = null;
+}
+
+function pickStore(name) {
+  $('storeTextInput').value = name;
+  confirmStoreTag();
+}
+
+function confirmStoreTag() {
+  if (!editingItemId) return;
+  const name = $('storeTextInput').value.trim();
+  if (!name) return;
+  storeTags[editingItemId] = name;
+  saveStoreTags();
+  refreshCardStore(editingItemId);
+  renderFilterChips();
+  closeStoreSheet();
+  toast('Store saved');
+}
+
+function removeStoreTag() {
+  if (!editingItemId) return;
+  delete storeTags[editingItemId];
+  saveStoreTags();
+  refreshCardStore(editingItemId);
+  renderFilterChips();
+  closeStoreSheet();
+  toast('Tag removed');
+}
+
+function refreshCardStore(itemId) {
+  const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
+  if (!card) return;
+  const storeDiv = card.querySelector('.card-store');
+  if (storeDiv) storeDiv.innerHTML = storeTagBtn(itemId);
 }
 
 function renderSummary(all) {
@@ -1297,14 +1597,17 @@ async function generate(colMap = {}) {
     setSpinner(true, 'Computing par levels…');
     items = mergeData(sheetMap, invMap, velMap, weeksTarget);
 
+    setSpinner(true, 'Loading store tags…');
+    storeTags = await loadStoreTags();
+
     // Show results
     $('emptyState').style.display  = 'none';
     $('results').style.display     = 'block';
     $('exportBtn').style.display   = 'inline-flex';
 
     renderSummary(items);
+    renderFilterChips();
     const sorted = sortItems(items, $('sortSelect').value);
-    $('sectionTitle').textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
     renderGrid(sorted);
 
     setSpinner(false);
@@ -1385,7 +1688,6 @@ function reSort() {
   if (!items.length) return;
   const sorted = sortItems(items, $('sortSelect').value);
   renderGrid(sorted);
-  // Re-apply cached images
   sorted.forEach(item => { if (item.image) updateCardImage(item); });
 }
 
@@ -1420,6 +1722,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('applyMapper').addEventListener('click', () => generate(readMapper()));
 
   $('sheetUrl').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+  $('storeTextInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmStoreTag(); });
 });
 </script>
 </body>
