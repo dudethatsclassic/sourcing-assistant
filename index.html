@@ -923,8 +923,26 @@ function sortItems(arr, mode) {
 // ─── Walmart Image Fetch ──────────────────────────────────────────────────────
 const imgCache = {};
 
+async function checkLocalImage(itemId) {
+  const exts = ['jpg', 'jpeg', 'png', 'webp'];
+  for (const ext of exts) {
+    const url = `images/${itemId}.${ext}`;
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      if (res.ok) return url;
+    } catch { }
+  }
+  return null;
+}
+
 async function fetchWalmartImage(itemId) {
   if (imgCache[itemId] !== undefined) return imgCache[itemId];
+
+  // Try local image first
+  const local = await checkLocalImage(itemId);
+  if (local) { imgCache[itemId] = local; return local; }
+
+  // Fall back to proxy
   try {
     const proxyUrl =
       'https://api.allorigins.win/get?url=' +
@@ -933,7 +951,6 @@ async function fetchWalmartImage(itemId) {
     if (!res.ok) { imgCache[itemId] = null; return null; }
     const data = await res.json();
     const html = data.contents || '';
-    // Try og:image first, then twitter:image
     const patterns = [
       /property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
       /content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
