@@ -500,6 +500,56 @@
       line-height: 1.65;
     }
 
+    /* ── Archive button ── */
+    .card-archive-btn {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      border: none;
+      background: rgba(255,255,255,0.85);
+      color: var(--muted-light);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s, background 0.15s;
+      backdrop-filter: blur(4px);
+      line-height: 1;
+    }
+
+    .card:hover .card-archive-btn { opacity: 1; }
+    .card-archive-btn:hover { color: var(--red); background: var(--red-dim); }
+
+    /* archived card state */
+    .card.is-archived { opacity: 0.45; }
+    .card.is-archived .card-archive-btn { opacity: 1; color: var(--accent-mid); background: var(--accent-dim); }
+
+    /* archived toggle chip */
+    .archived-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: inherit;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .archived-toggle:hover { border-color: var(--muted-light); color: var(--text); }
+    .archived-toggle.showing { background: var(--accent-dim); border-color: var(--accent-dim2); color: var(--accent); }
+
     /* ── Column Mapper ── */
     .mapper-banner {
       background: #fffcf0;
@@ -849,6 +899,7 @@
     <div class="store-filters" id="storeFilters"></div>
     <div class="toolbar">
       <div class="section-title" id="sectionTitle"></div>
+      <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
       <select class="sort-select" id="sortSelect">
         <option value="stock-asc">Lowest Stock First</option>
         <option value="buy-desc">Most to Buy First</option>
@@ -999,59 +1050,78 @@ async function fetchGitHubOrders() {
 
 const LS_TAGS_KEY = 'sa_store_tags_backup';
 
-function saveTagsLocal(tags) {
-  try { localStorage.setItem(LS_TAGS_KEY, JSON.stringify(tags)); } catch (_) {}
+const LS_BACKUP_KEY = 'sa_backup';
+
+function saveLocal() {
+  try {
+    localStorage.setItem(LS_BACKUP_KEY, JSON.stringify({
+      tags: storeTags,
+      archived: [...archivedIds],
+    }));
+  } catch (_) {}
 }
 
-function loadTagsLocal() {
+function loadLocal() {
   try {
-    const raw = localStorage.getItem(LS_TAGS_KEY);
+    const raw = localStorage.getItem(LS_BACKUP_KEY)
+      || localStorage.getItem(LS_TAGS_KEY); // migrate old key
     return raw ? JSON.parse(raw) : null;
   } catch (_) { return null; }
 }
 
-async function loadStoreTags() {
+async function loadStoreData() {
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
       headers: { 'X-Master-Key': JSONBIN_KEY }
     });
     const data = await res.json();
-    const raw = data.record?.tags || {};
-    // Migrate old single-string format to array format
-    const migrated = {};
-    Object.entries(raw).forEach(([id, val]) => {
-      migrated[id] = Array.isArray(val) ? val : [val];
+    const rawTags = data.record?.tags || {};
+    const rawArchived = data.record?.archived || [];
+
+    // Migrate old single-string tag format to array
+    const tags = {};
+    Object.entries(rawTags).forEach(([id, val]) => {
+      tags[id] = Array.isArray(val) ? val : [val];
     });
-    // If JSONBin returned suspiciously few tags vs local backup, prefer backup
-    const local = loadTagsLocal();
-    const localCount  = local  ? Object.keys(local).length  : 0;
-    const remoteCount = Object.keys(migrated).length;
-    if (local && localCount > remoteCount + 2) {
-      console.warn(`JSONBin has ${remoteCount} tags but local backup has ${localCount} — restoring from backup and re-syncing.`);
-      saveStoreTags_raw(local); // push backup back to JSONBin
-      return local;
+
+    // Guard: if remote has far fewer tags than local backup, restore from backup
+    const local = loadLocal();
+    const localTagCount  = local?.tags  ? Object.keys(local.tags).length  : 0;
+    const remoteTagCount = Object.keys(tags).length;
+    if (local?.tags && localTagCount > remoteTagCount + 2) {
+      console.warn(`JSONBin has ${remoteTagCount} tags but local has ${localTagCount} — restoring from backup.`);
+      const restored = { tags: local.tags, archived: local.archived || [] };
+      saveStoreData_raw(restored);
+      return restored;
     }
-    saveTagsLocal(migrated); // keep local in sync
-    return migrated;
+
+    const result = { tags, archived: rawArchived };
+    saveLocal();
+    return result;
   } catch {
-    // Network error — fall back to local backup
-    return loadTagsLocal() || {};
+    const local = loadLocal();
+    return { tags: local?.tags || {}, archived: local?.archived || [] };
   }
 }
 
-async function saveStoreTags_raw(tags) {
+async function saveStoreData_raw({ tags, archived }) {
   try {
     await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
-      body: JSON.stringify({ tags })
+      body: JSON.stringify({ tags, archived }),
     });
-  } catch (e) { console.error('Tag save failed', e); }
+  } catch (e) { console.error('Store data save failed', e); }
 }
 
 async function saveStoreTags() {
-  saveTagsLocal(storeTags); // always write locally first
-  await saveStoreTags_raw(storeTags);
+  saveLocal();
+  await saveStoreData_raw({ tags: storeTags, archived: [...archivedIds] });
+}
+
+async function saveArchived() {
+  saveLocal();
+  await saveStoreData_raw({ tags: storeTags, archived: [...archivedIds] });
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -1059,7 +1129,9 @@ let wfsRows = null;   // raw parsed CSV rows
 let sbRows  = null;
 let items   = [];     // computed items
 let wfsColMap = {};   // manual column overrides
-let storeTags = {};   // { itemId: storeName }
+let storeTags = {};   // { itemId: [storeName] }
+let archivedIds = new Set(); // item IDs hidden from view
+let showArchived = false;    // toggle to reveal archived cards
 let activeFilter = null;  // currently selected store filter
 let editingItemId = null; // item being tagged
 
@@ -1551,7 +1623,7 @@ function badgeLabel(u) {
 
 function renderCard(item, delay = 0) {
   const el = document.createElement('div');
-  el.className = 'card';
+  el.className = 'card' + (archivedIds.has(item.itemId) ? ' is-archived' : '');
   el.dataset.id = item.itemId;
   el.style.animationDelay = delay + 'ms';
 
@@ -1562,6 +1634,9 @@ function renderCard(item, delay = 0) {
     <div class="card-img">
       ${imgTag(item)}
       <div class="badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+      <button class="card-archive-btn" onclick="toggleArchive('${escHtml(item.itemId)}')"
+        title="${archivedIds.has(item.itemId) ? 'Restore SKU' : 'Hide SKU'}"
+      >${archivedIds.has(item.itemId) ? '↩' : '✕'}</button>
     </div>
     <div class="card-body">
       <div class="card-name">${escHtml(item.name)}</div>
@@ -1625,15 +1700,74 @@ function updateCardImage(item) {
 }
 
 function renderGrid(sortedItems) {
-  const visible = activeFilter
+  let visible = activeFilter
     ? sortedItems.filter(x => (storeTags[x.itemId] || []).includes(activeFilter))
     : sortedItems;
+  if (!showArchived) visible = visible.filter(x => !archivedIds.has(x.itemId));
   const grid = $('cardsGrid');
   grid.innerHTML = '';
   visible.forEach((item, i) => {
     grid.appendChild(renderCard(item, i * 35));
   });
+  const hiddenCount = archivedIds.size;
   $('sectionTitle').textContent = `${visible.length} item${visible.length !== 1 ? 's' : ''}${activeFilter ? ' · ' + activeFilter : ''}`;
+  renderArchivedToggle();
+}
+
+// ─── Archive ─────────────────────────────────────────────────────────────────
+function toggleArchive(itemId) {
+  if (archivedIds.has(itemId)) {
+    archivedIds.delete(itemId);
+    toast('SKU restored');
+  } else {
+    archivedIds.add(itemId);
+    toast('SKU hidden');
+  }
+  saveArchived();
+
+  // Update just this card's state without full re-render
+  const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
+  if (card) {
+    const isNowArchived = archivedIds.has(itemId);
+    if (isNowArchived && !showArchived) {
+      // Fade out and remove
+      card.style.transition = 'opacity 0.3s, transform 0.3s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        renderGrid(sortItems(items, $('sortSelect').value));
+        renderArchivedToggle();
+      }, 300);
+    } else {
+      card.classList.toggle('is-archived', isNowArchived);
+      updateArchiveBtn(card, itemId);
+      renderArchivedToggle();
+    }
+  }
+}
+
+function updateArchiveBtn(card, itemId) {
+  const btn = card.querySelector('.card-archive-btn');
+  if (!btn) return;
+  const isArchived = archivedIds.has(itemId);
+  btn.title = isArchived ? 'Restore SKU' : 'Hide SKU';
+  btn.textContent = isArchived ? '↩' : '✕';
+}
+
+function renderArchivedToggle() {
+  const count = archivedIds.size;
+  const el = $('archivedToggle');
+  if (!el) return;
+  if (count === 0) { el.style.display = 'none'; return; }
+  el.style.display = 'inline-flex';
+  el.textContent = showArchived ? `${count} hidden · Hide` : `${count} hidden · Show`;
+  el.className = 'archived-toggle' + (showArchived ? ' showing' : '');
+}
+
+function toggleShowArchived() {
+  showArchived = !showArchived;
+  renderArchivedToggle();
+  renderGrid(sortItems(items, $('sortSelect').value));
 }
 
 // ─── Store Filter Chips ────────────────────────────────────────────────────────
@@ -1914,7 +2048,9 @@ async function generate(colMap = {}) {
     items = mergeData(sheetMap, invMap, velMap, weeksTarget);
 
     setSpinner(true, 'Loading store tags…');
-    storeTags = await loadStoreTags();
+    const storeData = await loadStoreData();
+    storeTags  = storeData.tags;
+    archivedIds = new Set(storeData.archived);
 
     // Show results
     $('emptyState').style.display  = 'none';
