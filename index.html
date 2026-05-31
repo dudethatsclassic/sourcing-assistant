@@ -198,6 +198,8 @@
     .drop-zone:hover { border-color: var(--accent-mid); background: var(--accent-dim); }
     .drop-zone.over  { border-color: var(--accent-mid); background: var(--accent-dim); }
     .drop-zone.loaded { border-color: var(--green); background: var(--green-dim); border-style: solid; }
+    .drop-zone.github-ready { border-color: var(--accent-mid); border-style: solid; background: var(--accent-dim); }
+    .drop-zone.github-ready .drop-name { color: var(--accent-mid); }
 
     .drop-zone input[type="file"] {
       position: absolute;
@@ -947,6 +949,53 @@ function storeLogoImg(name, size = 16) {
 
 const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/6a1c7f3cddf5aa59f77c95a9';
 const JSONBIN_KEY = '$2a$10$BcDWdgwfihwP/01f64ZXlOcF6zHcSSdC..Uh80lZ8jyulxqA8zRmS';
+
+// ─── GitHub Auto-Fetch ────────────────────────────────────────────────────────
+const GITHUB_RAW = 'https://raw.githubusercontent.com/dudethatsclassic/sourcing-assistant/main/data';
+const GITHUB_INVENTORY_URL = GITHUB_RAW + '/inventoryHealth.csv';
+const GITHUB_ORDERS_URL    = GITHUB_RAW + '/orders.xlsx';
+
+async function checkGitHubFiles() {
+  const [invOk, ordOk] = await Promise.all([
+    fetch(GITHUB_INVENTORY_URL, { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
+    fetch(GITHUB_ORDERS_URL,    { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
+  ]);
+  if (invOk && !wfsRows) {
+    $('wfsName').textContent = '☁ Auto-loads from GitHub';
+    $('wfsDrop').classList.add('github-ready');
+  }
+  if (ordOk && !sbRows) {
+    $('sbName').textContent = '☁ Auto-loads from GitHub';
+    $('sbDrop').classList.add('github-ready');
+  }
+  return { invOk, ordOk };
+}
+
+async function fetchGitHubInventory() {
+  const res = await fetch(GITHUB_INVENTORY_URL, { cache: 'no-cache' });
+  if (!res.ok) return null;
+  const text = await res.text();
+  const { rows } = parseCSV(text);
+  return rows.length ? rows : null;
+}
+
+async function fetchGitHubOrders() {
+  const res = await fetch(GITHUB_ORDERS_URL, { cache: 'no-cache' });
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  const wb  = XLSX.read(buf, { type: 'array', cellDates: true });
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const rows = raw.map(r => {
+    const out = {};
+    Object.keys(r).forEach(k => {
+      const nk = k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      out[nk] = String(r[k] ?? '').trim();
+    });
+    return out;
+  });
+  return rows.length ? rows : null;
+}
 
 async function loadStoreTags() {
   try {
@@ -1772,10 +1821,21 @@ async function generate(colMap = {}) {
       sheetMap = parseSheetCSVText(csv);
     }
 
-    // 2. WFS
+    // 2. WFS — use manual upload, or auto-fetch from GitHub
     let invMap = new Map();
-    if (wfsRows) {
-      const result = parseWFSRows(wfsRows, colMap);
+    let wfsSource = wfsRows;
+    if (!wfsSource) {
+      setSpinner(true, 'Fetching inventory from GitHub…');
+      const fetched = await fetchGitHubInventory().catch(() => null);
+      if (fetched) {
+        wfsSource = fetched;
+        $('wfsName').textContent = '✓ Loaded from GitHub';
+        $('wfsDrop').classList.remove('github-ready');
+        $('wfsDrop').classList.add('loaded');
+      }
+    }
+    if (wfsSource) {
+      const result = parseWFSRows(wfsSource, colMap);
       if (result.__needsMapper) {
         setSpinner(false);
         showMapper(result.headers);
@@ -1784,10 +1844,21 @@ async function generate(colMap = {}) {
       invMap = result;
     }
 
-    // 3. Sales data (Seller Center or Sellerboard)
+    // 3. Sales data — use manual upload, or auto-fetch from GitHub
     let velMap = new Map();
-    if (sbRows) {
-      velMap = parseSalesRows(sbRows);
+    let sbSource = sbRows;
+    if (!sbSource) {
+      setSpinner(true, 'Fetching orders from GitHub…');
+      const fetched = await fetchGitHubOrders().catch(() => null);
+      if (fetched) {
+        sbSource = fetched;
+        $('sbName').textContent = '✓ Loaded from GitHub';
+        $('sbDrop').classList.remove('github-ready');
+        $('sbDrop').classList.add('loaded');
+      }
+    }
+    if (sbSource) {
+      velMap = parseSalesRows(sbSource);
     }
 
     if (!sheetMap.size && !invMap.size && !velMap.size) {
@@ -1911,9 +1982,16 @@ function clearAll() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadPrefs();
+  checkGitHubFiles(); // non-blocking — updates drop zones if GitHub files exist
 
-  setupDrop('wfsDrop', 'wfsFile', 'wfsName', rows => { wfsRows = rows; });
-  setupDrop('sbDrop',  'sbFile',  'sbName',  rows => { sbRows  = rows; });
+  setupDrop('wfsDrop', 'wfsFile', 'wfsName', rows => {
+    wfsRows = rows;
+    $('wfsDrop').classList.remove('github-ready'); // manual overrides GitHub indicator
+  });
+  setupDrop('sbDrop', 'sbFile', 'sbName', rows => {
+    sbRows = rows;
+    $('sbDrop').classList.remove('github-ready');
+  });
 
   $('generateBtn').addEventListener('click', () => generate());
   $('clearBtn').addEventListener('click', clearAll);
