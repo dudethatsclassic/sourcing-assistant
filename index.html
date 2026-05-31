@@ -862,11 +862,10 @@ function parseSalesRows(rows) {
 
 // ─── Merge & Compute ──────────────────────────────────────────────────────────
 function mergeData(sheetMap, invMap, velMap, weeksTarget) {
-  const allIds = new Set([
-    ...sheetMap.keys(),
-    ...invMap.keys(),
-    ...velMap.keys(),
-  ]);
+  // If we have sales data, only show items that sold — otherwise fall back to union
+  const allIds = velMap.size
+    ? new Set(velMap.keys())
+    : new Set([...sheetMap.keys(), ...invMap.keys()]);
 
   const out = [];
   allIds.forEach(id => {
