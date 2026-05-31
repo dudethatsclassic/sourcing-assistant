@@ -997,6 +997,19 @@ async function fetchGitHubOrders() {
   return rows.length ? rows : null;
 }
 
+const LS_TAGS_KEY = 'sa_store_tags_backup';
+
+function saveTagsLocal(tags) {
+  try { localStorage.setItem(LS_TAGS_KEY, JSON.stringify(tags)); } catch (_) {}
+}
+
+function loadTagsLocal() {
+  try {
+    const raw = localStorage.getItem(LS_TAGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
 async function loadStoreTags() {
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
@@ -1009,18 +1022,36 @@ async function loadStoreTags() {
     Object.entries(raw).forEach(([id, val]) => {
       migrated[id] = Array.isArray(val) ? val : [val];
     });
+    // If JSONBin returned suspiciously few tags vs local backup, prefer backup
+    const local = loadTagsLocal();
+    const localCount  = local  ? Object.keys(local).length  : 0;
+    const remoteCount = Object.keys(migrated).length;
+    if (local && localCount > remoteCount + 2) {
+      console.warn(`JSONBin has ${remoteCount} tags but local backup has ${localCount} — restoring from backup and re-syncing.`);
+      saveStoreTags_raw(local); // push backup back to JSONBin
+      return local;
+    }
+    saveTagsLocal(migrated); // keep local in sync
     return migrated;
-  } catch { return {}; }
+  } catch {
+    // Network error — fall back to local backup
+    return loadTagsLocal() || {};
+  }
 }
 
-async function saveStoreTags() {
+async function saveStoreTags_raw(tags) {
   try {
     await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
-      body: JSON.stringify({ tags: storeTags })
+      body: JSON.stringify({ tags })
     });
   } catch (e) { console.error('Tag save failed', e); }
+}
+
+async function saveStoreTags() {
+  saveTagsLocal(storeTags); // always write locally first
+  await saveStoreTags_raw(storeTags);
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
