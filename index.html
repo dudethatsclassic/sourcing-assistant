@@ -532,6 +532,216 @@
       line-height: 1.65;
     }
 
+    /* ── View Toggle ── */
+    .view-toggle {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      overflow: hidden;
+    }
+
+    .view-btn {
+      padding: 6px 10px;
+      background: var(--surface);
+      border: none;
+      cursor: pointer;
+      color: var(--muted-light);
+      font-size: 15px;
+      line-height: 1;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .view-btn.active { background: var(--accent-dim); color: var(--accent); }
+    .view-btn:first-child { border-right: 1px solid var(--border); }
+
+    /* ── List View ── */
+    .list-view {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border-light);
+      border: 1px solid var(--border-light);
+      border-radius: var(--r);
+      overflow: hidden;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 52px 1fr auto 56px 56px 56px 64px 90px auto 28px;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface);
+      transition: background 0.15s;
+      opacity: 0;
+      animation: fadeUp 0.22s ease forwards;
+    }
+
+    .list-row:hover { background: var(--surface2); }
+    .list-row.is-archived { opacity: 0.4; }
+
+    .list-thumb {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      background: var(--surface2);
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .list-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 4px;
+    }
+
+    .list-thumb-placeholder { font-size: 22px; opacity: 0.2; }
+
+    .list-name-col { min-width: 0; }
+
+    .list-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .list-id {
+      font-size: 11px;
+      color: var(--muted-light);
+      font-family: 'SF Mono', 'Courier New', monospace;
+      margin-top: 1px;
+    }
+
+    .list-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 5px;
+      white-space: nowrap;
+    }
+
+    .list-stat { text-align: center; }
+
+    .list-stat-label {
+      font-size: 10px;
+      color: var(--muted-light);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      display: block;
+      margin-bottom: 1px;
+    }
+
+    .list-stat-value {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      line-height: 1;
+    }
+
+    .list-price {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .list-price-label {
+      font-size: 10px;
+      color: var(--muted-light);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 1px;
+    }
+
+    .list-stores {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      justify-content: flex-end;
+    }
+
+    .list-store-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 7px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      background: var(--accent-dim);
+      color: var(--accent);
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .list-store-add {
+      background: var(--surface2);
+      color: var(--muted-light);
+      border: 1px dashed var(--border);
+    }
+
+    .list-archive-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: none;
+      background: none;
+      color: var(--muted-light);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .list-row:hover .list-archive-btn,
+    .list-row.is-archived .list-archive-btn { opacity: 1; }
+    .list-archive-btn:hover { color: var(--red); background: var(--red-dim); }
+    .list-row.is-archived .list-archive-btn { color: var(--accent-mid); background: var(--accent-dim); }
+
+    /* list header row */
+    .list-header {
+      display: grid;
+      grid-template-columns: 52px 1fr auto 56px 56px 56px 64px 90px auto 28px;
+      gap: 12px;
+      padding: 8px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .list-header-cell {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--muted-light);
+      text-align: center;
+    }
+
+    .list-header-cell.left { text-align: left; }
+
+    @media (max-width: 760px) {
+      .list-row,
+      .list-header {
+        grid-template-columns: 44px 1fr auto 48px 48px 52px auto;
+      }
+      /* hide price and stores columns on narrow screens */
+      .list-price, .list-stores,
+      .list-header-cell.hide-sm { display: none; }
+    }
+
     /* ── Archive button ── */
     .card-archive-btn {
       position: absolute;
@@ -942,8 +1152,12 @@
         <option value="velocity-desc">Fastest Moving</option>
         <option value="name-asc">Name A–Z</option>
       </select>
+      <div class="view-toggle">
+        <button class="view-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">⊞</button>
+        <button class="view-btn" id="viewList" onclick="setView('list')" title="List view">≡</button>
+      </div>
     </div>
-    <div class="cards-grid" id="cardsGrid"></div>
+    <div id="itemsContainer"><div class="cards-grid" id="cardsGrid"></div></div>
   </div>
 
   <!-- ── Empty State ── -->
@@ -1169,7 +1383,8 @@ let storeTags = {};   // { itemId: [storeName] }
 let archivedIds = new Set(); // item IDs hidden from view
 let showArchived = false;    // toggle to reveal archived cards
 let searchQuery  = '';       // active search string
-let activeFilter = null;  // currently selected store filter
+let activeFilter = null;     // currently selected store filter
+let viewMode     = 'grid';   // 'grid' | 'list'
 let editingItemId = null; // item being tagged
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
@@ -1629,6 +1844,14 @@ async function enrichImagesProgressively(itemsToFetch) {
   }
 }
 
+// ─── View Mode ───────────────────────────────────────────────────────────────
+function setView(mode) {
+  viewMode = mode;
+  $('viewGrid').classList.toggle('active', mode === 'grid');
+  $('viewList').classList.toggle('active', mode === 'list');
+  if (items.length) renderGrid(sortItems(items, $('sortSelect').value));
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 function fmtPrice(p) { return p != null ? '$' + p.toFixed(2) : null; }
 
@@ -1722,18 +1945,111 @@ function storeTagBtn(itemId) {
 
 function updateCardImage(item) {
   if (!item.image) return;
+  // Update card grid image
   const card = document.querySelector(`.card[data-id="${CSS.escape(item.itemId)}"]`);
-  if (!card) return;
-  const zone = card.querySelector('.card-img');
-  if (!zone) return;
-  const placeholder = zone.querySelector('.img-placeholder');
-  if (!placeholder) return; // already has an image
-  const img = document.createElement('img');
-  img.src = item.image;
-  img.alt = '';
-  img.loading = 'lazy';
-  img.onerror = () => img.remove();
-  placeholder.replaceWith(img);
+  if (card) {
+    const zone = card.querySelector('.card-img');
+    if (zone) {
+      const placeholder = zone.querySelector('.img-placeholder');
+      if (placeholder) {
+        const img = document.createElement('img');
+        img.src = item.image; img.alt = ''; img.loading = 'lazy';
+        img.onerror = () => img.remove();
+        placeholder.replaceWith(img);
+      }
+    }
+  }
+  // Update list row thumbnail
+  const row = document.querySelector(`.list-row[data-id="${CSS.escape(item.itemId)}"]`);
+  if (row) {
+    const thumb = row.querySelector('.list-thumb');
+    if (thumb) {
+      const placeholder = thumb.querySelector('.list-thumb-placeholder');
+      if (placeholder) {
+        const img = document.createElement('img');
+        img.src = item.image; img.alt = ''; img.loading = 'lazy';
+        img.onerror = () => img.remove();
+        placeholder.replaceWith(img);
+      }
+    }
+  }
+}
+
+function listThumb(item) {
+  if (item.image) {
+    return `<img src="${escHtml(item.image)}" alt="" loading="lazy"
+              onerror="this.parentElement.innerHTML='<div class=\\'list-thumb-placeholder\\'>📦</div>'">`;
+  }
+  return '<div class="list-thumb-placeholder">📦</div>';
+}
+
+function renderListRow(item, delay = 0) {
+  const el = document.createElement('div');
+  el.className = 'list-row' + (archivedIds.has(item.itemId) ? ' is-archived' : '');
+  el.dataset.id = item.itemId;
+  el.style.animationDelay = delay + 'ms';
+
+  const stores = storeTags[item.itemId] || [];
+  const storeHtml = stores.map(s =>
+    `<button class="list-store-chip" onclick="openStoreSheet('${escHtml(item.itemId)}')">${storeLogoImg(s, 12)} ${escHtml(s)}</button>`
+  ).join('') + `<button class="list-store-chip list-store-add" onclick="openStoreSheet('${escHtml(item.itemId)}')">+</button>`;
+
+  const stockClass = item.currentStock === 0 ? 'val-red' : '';
+  const buyClass   = item.suggestBuy > 0 ? 'val-accent' : 'val-muted';
+  const isArchived = archivedIds.has(item.itemId);
+
+  el.innerHTML = `
+    <div class="list-thumb">${listThumb(item)}</div>
+    <div class="list-name-col">
+      <div class="list-name">${escHtml(item.name)}</div>
+      <div class="list-id">${escHtml(item.itemId)}</div>
+    </div>
+    <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+    <div class="list-stat">
+      <span class="list-stat-label">In Stock</span>
+      <span class="list-stat-value ${stockClass}">${item.currentStock}</span>
+    </div>
+    <div class="list-stat">
+      <span class="list-stat-label">Inbound</span>
+      <span class="list-stat-value val-muted">${item.inbound}</span>
+    </div>
+    <div class="list-stat">
+      <span class="list-stat-label">Buy</span>
+      <span class="list-stat-value ${buyClass}">${item.suggestBuy}</span>
+    </div>
+    <div class="list-stat">
+      <span class="list-stat-label">Vel</span>
+      <span class="list-stat-value">${item.weekly % 1 === 0 ? item.weekly : item.weekly.toFixed(1)}<span class="sub">/wk</span></span>
+    </div>
+    <div class="list-price">
+      <div class="list-price-label">Buy price</div>
+      ${fmtPriceRange(item.minPrice, item.maxPrice)}
+    </div>
+    <div class="list-stores">${storeHtml}</div>
+    <button class="list-archive-btn" onclick="toggleArchive('${escHtml(item.itemId)}')"
+      title="${isArchived ? 'Restore SKU' : 'Hide SKU'}">${isArchived ? '↩' : '✕'}</button>`;
+  return el;
+}
+
+function renderList(visibleItems) {
+  const container = $('itemsContainer');
+  container.innerHTML = `
+    <div class="list-view">
+      <div class="list-header">
+        <div class="list-header-cell"></div>
+        <div class="list-header-cell left">Product</div>
+        <div class="list-header-cell">Status</div>
+        <div class="list-header-cell">In Stock</div>
+        <div class="list-header-cell">Inbound</div>
+        <div class="list-header-cell">Buy</div>
+        <div class="list-header-cell">Velocity</div>
+        <div class="list-header-cell hide-sm">Buy Price</div>
+        <div class="list-header-cell hide-sm">Stores</div>
+        <div class="list-header-cell"></div>
+      </div>
+    </div>`;
+  const listEl = container.querySelector('.list-view');
+  visibleItems.forEach((item, i) => listEl.appendChild(renderListRow(item, i * 20)));
 }
 
 function renderGrid(sortedItems) {
@@ -1747,14 +2063,19 @@ function renderGrid(sortedItems) {
       x.name.toLowerCase().includes(q) || x.itemId.includes(q)
     );
   }
-  const grid = $('cardsGrid');
-  grid.innerHTML = '';
-  visible.forEach((item, i) => {
-    grid.appendChild(renderCard(item, i * 35));
-  });
-  const hiddenCount = archivedIds.size;
+
   $('sectionTitle').textContent = `${visible.length} item${visible.length !== 1 ? 's' : ''}${activeFilter ? ' · ' + activeFilter : ''}`;
   renderArchivedToggle();
+
+  if (viewMode === 'list') {
+    renderList(visible);
+    return;
+  }
+
+  const container = $('itemsContainer');
+  container.innerHTML = '<div class="cards-grid" id="cardsGrid"></div>';
+  const grid = $('cardsGrid');
+  visible.forEach((item, i) => grid.appendChild(renderCard(item, i * 35)));
 }
 
 // ─── Archive ─────────────────────────────────────────────────────────────────
