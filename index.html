@@ -1265,6 +1265,7 @@
     <div class="toolbar">
       <div class="section-title" id="sectionTitle"></div>
       <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
+      <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
         <input type="search" class="search-input" id="searchInput" placeholder="Search SKUs…" autocomplete="off">
@@ -2211,6 +2212,7 @@ function renderGrid(sortedItems) {
 
   $('sectionTitle').textContent = `${visible.length} item${visible.length !== 1 ? 's' : ''}${activeFilter ? ' · ' + activeFilter : ''}`;
   renderArchivedToggle();
+  renderClearBoughtBtn();
 
   if (viewMode === 'list') {
     renderList(visible);
@@ -2273,6 +2275,26 @@ function renderArchivedToggle() {
   el.className = 'archived-toggle' + (showArchived ? ' showing' : '');
 }
 
+function renderClearBoughtBtn() {
+  const el = $('clearBoughtBtn');
+  if (!el) return;
+  const count = Object.keys(purchases).length;
+  if (count === 0) { el.style.display = 'none'; return; }
+  el.style.display = 'inline-flex';
+  el.textContent = `Clear ${count} bought`;
+}
+
+function clearAllPurchases() {
+  if (!Object.keys(purchases).length) return;
+  if (!confirm(`Clear all ${Object.keys(purchases).length} bought marks?`)) return;
+  purchases = {};
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+  renderClearBoughtBtn();
+  renderGrid(sortItems(items, $('sortSelect').value));
+  toast('All bought marks cleared');
+}
+
 function toggleShowArchived() {
   showArchived = !showArchived;
   renderArchivedToggle();
@@ -2314,6 +2336,7 @@ function confirmPurchase() {
   saveLocal();
   saveStoreData_raw(currentPayload());
   refreshPurchaseUI(buyingItemId);
+  renderClearBoughtBtn();
   closeBuySheet();
   toast(`✓ Bought ${qty} marked`);
 }
@@ -2324,6 +2347,7 @@ function unmarkPurchase() {
   saveLocal();
   saveStoreData_raw(currentPayload());
   refreshPurchaseUI(buyingItemId);
+  renderClearBoughtBtn();
   closeBuySheet();
   toast('Purchase unmarked');
 }
