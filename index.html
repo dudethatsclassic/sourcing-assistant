@@ -1927,16 +1927,20 @@ function parseShipmentRows(rows) {
   if (!rows.length) return new Map();
   const s = rows[0];
 
-  const nameCol = findCol(s, ['items_name', 'item_name', 'name', 'product', 'description']);
-  const qtyCol  = findCol(s, ['shipped_units', 'shipped', 'units_shipped', 'quantity', 'qty']);
+  const nameCol     = findCol(s, ['items_name', 'item_name', 'name', 'product', 'description']);
+  const qtyCol      = findCol(s, ['shipped_units', 'shipped', 'units_shipped', 'quantity', 'qty']);
+  const receivedCol = findCol(s, ['received_units', 'received', 'units_received']);
 
   if (!nameCol || !qtyCol) return new Map();
 
-  const map = new Map(); // raw name → shipped qty
+  const map = new Map(); // raw name → outstanding (in-transit) qty
   rows.forEach(row => {
-    const name = (row[nameCol] || '').trim();
-    const qty  = parseInt(row[qtyCol], 10) || 0;
-    if (name && qty > 0) map.set(name, (map.get(name) || 0) + qty);
+    const name     = (row[nameCol] || '').trim();
+    const shipped  = parseInt(row[qtyCol], 10) || 0;
+    const received = receivedCol ? (parseInt(row[receivedCol], 10) || 0) : 0;
+    // Only count units not yet received — once received they're in the WFS report
+    const outstanding = Math.max(0, shipped - received);
+    if (name && outstanding > 0) map.set(name, (map.get(name) || 0) + outstanding);
   });
   return map;
 }
