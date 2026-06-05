@@ -1497,6 +1497,7 @@ function saveLocal() {
       tags: storeTags,
       archived: [...archivedIds],
       purchases,
+      shipment: Object.fromEntries(shipNameMap),
     }));
   } catch (_) {}
 }
@@ -1518,6 +1519,7 @@ async function loadStoreData() {
     const rawTags = data.record?.tags || {};
     const rawArchived = data.record?.archived || [];
     const rawPurchases = data.record?.purchases || {};
+    const rawShipment = data.record?.shipment || {};
 
     // Migrate old single-string tag format to array
     const tags = {};
@@ -1531,17 +1533,17 @@ async function loadStoreData() {
     const remoteTagCount = Object.keys(tags).length;
     if (local?.tags && localTagCount > remoteTagCount + 2) {
       console.warn(`JSONBin has ${remoteTagCount} tags but local has ${localTagCount} — restoring from backup.`);
-      const restored = { tags: local.tags, archived: local.archived || [] };
+      const restored = { tags: local.tags, archived: local.archived || [], purchases: local.purchases || {}, shipment: local.shipment || {} };
       saveStoreData_raw(restored);
       return restored;
     }
 
-    const result = { tags, archived: rawArchived, purchases: rawPurchases };
+    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment };
     saveLocal();
     return result;
   } catch {
     const local = loadLocal();
-    return { tags: local?.tags || {}, archived: local?.archived || [], purchases: local?.purchases || {} };
+    return { tags: local?.tags || {}, archived: local?.archived || [], purchases: local?.purchases || {}, shipment: local?.shipment || {} };
   }
 }
 
@@ -1556,7 +1558,7 @@ async function saveStoreData_raw(payload) {
 }
 
 function currentPayload() {
-  return { tags: storeTags, archived: [...archivedIds], purchases };
+  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap) };
 }
 
 async function saveStoreTags() {
@@ -1567,6 +1569,17 @@ async function saveStoreTags() {
 async function saveArchived() {
   saveLocal();
   await saveStoreData_raw(currentPayload());
+}
+
+// Saves only the shipment field — reads remote first so tags/purchases aren't overwritten
+// Safe to call before generate() when storeTags/purchases may not be loaded yet
+async function saveShipmentToCloud() {
+  try {
+    const res = await fetch(JSONBIN_URL + '/latest', { headers: { 'X-Master-Key': JSONBIN_KEY } });
+    const data = await res.json();
+    const current = data.record || {};
+    await saveStoreData_raw({ ...current, shipment: Object.fromEntries(shipNameMap) });
+  } catch (e) { console.error('Shipment cloud save failed', e); }
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -2806,14 +2819,19 @@ async function generate(colMap = {}) {
     setSpinner(true, 'Computing par levels…');
     items = mergeData(sheetMap, invMap, velMap, weeksTarget);
 
-    // Apply inbound shipment data (in-transit units not yet checked in to WFS)
-    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
-
-    setSpinner(true, 'Loading store tags…');
+    setSpinner(true, 'Loading store data…');
     const storeData = await loadStoreData();
     storeTags   = storeData.tags;
     archivedIds = new Set(storeData.archived);
     purchases   = storeData.purchases || {};
+
+    // If no shipment CSVs uploaded this session, restore from cloud
+    if (!shipNameMap.size && storeData.shipment && Object.keys(storeData.shipment).length) {
+      shipNameMap = new Map(Object.entries(storeData.shipment).map(([k, v]) => [k, Number(v)]));
+    }
+
+    // Apply inbound shipment data (in-transit units not yet checked in to WFS)
+    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
 
     // Show results
     $('emptyState').style.display  = 'none';
@@ -2977,6 +2995,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `✓ ${csvFiles[0].name}`
             : `✓ ${count} shipment files loaded`;
           shipDropEl.classList.add('loaded');
+          saveLocal();
+          saveShipmentToCloud().then(() => toast('Shipment data synced to cloud ☁️'));
         }
       };
       reader.readAsText(file);
