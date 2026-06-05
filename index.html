@@ -1280,11 +1280,11 @@
     </div>
 
     <div class="field" style="margin-top:14px">
-      <label>Inbound Shipment CSV <span style="font-weight:400;color:var(--muted-light)">(optional — adds in-transit units before WFS receives them)</span></label>
+      <label>Inbound Shipment CSVs <span style="font-weight:400;color:var(--muted-light)">(optional — select multiple files at once for all open shipments)</span></label>
       <div class="drop-zone" id="shipDrop" style="min-height:72px">
-        <input type="file" accept=".csv" id="shipFile">
+        <input type="file" accept=".csv" id="shipFile" multiple>
         <div class="drop-icon">🚚</div>
-        <div class="drop-label">Drop shipment CSV or tap to upload</div>
+        <div class="drop-label">Drop shipment CSV(s) or tap to upload</div>
         <div class="drop-name" id="shipName"></div>
       </div>
     </div>
@@ -1572,7 +1572,7 @@ async function saveArchived() {
 // ─── State ───────────────────────────────────────────────────────────────────
 let wfsRows  = null;   // raw parsed CSV rows
 let sbRows   = null;
-let shipRows = null;   // inbound shipment CSV rows
+let shipNameMap = new Map(); // combined name→qty across all uploaded shipment CSVs
 let items   = [];     // computed items
 let wfsColMap = {};   // manual column overrides
 let storeTags = {};   // { itemId: [storeName] }
@@ -2761,10 +2761,7 @@ async function generate(colMap = {}) {
     items = mergeData(sheetMap, invMap, velMap, weeksTarget);
 
     // Apply inbound shipment data (in-transit units not yet checked in to WFS)
-    if (shipRows) {
-      const shipNameMap = parseShipmentRows(shipRows);
-      applyShipmentInbound(items, shipNameMap);
-    }
+    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap);
 
     setSpinner(true, 'Loading store tags…');
     const storeData = await loadStoreData();
@@ -2873,7 +2870,7 @@ function clearAll() {
   ['wfsFile', 'sbFile', 'shipFile'].forEach(id => { $(id).value = ''; });
   ['wfsName', 'sbName', 'shipName'].forEach(id => { $(id).textContent = ''; });
   ['wfsDrop', 'sbDrop', 'shipDrop'].forEach(id => { $(id).classList.remove('loaded'); });
-  shipRows = null;
+  shipNameMap = new Map();
 
   $('results').style.display    = 'none';
   $('wfsMapper').style.display  = 'none';
@@ -2896,33 +2893,54 @@ document.addEventListener('DOMContentLoaded', () => {
     sbRows = rows;
     $('sbDrop').classList.remove('github-ready');
   });
-  // Shipment CSV needs special handling — first 3 lines are metadata, line 4 is the real header
-  const shipDropEl  = $('shipDrop');
-  const shipFileEl  = $('shipFile');
-  const shipNameEl  = $('shipName');
-  function handleShipFile(file) {
-    if (!file || !file.name.toLowerCase().endsWith('.csv')) {
-      toast('Please upload a .csv file', true); return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => {
-      const text = e.target.result;
-      const lines = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-      // Find real header row (contains "Items name" or "item")
-      let headerIdx = lines.findIndex(l => /items?\s*name/i.test(l));
-      if (headerIdx === -1) headerIdx = 0; // fallback
-      const trimmed = lines.slice(headerIdx).join('\n');
-      const { rows } = parseCSV(trimmed);
-      shipRows = rows;
-      shipNameEl.textContent = '✓ ' + file.name;
-      shipDropEl.classList.add('loaded');
-    };
-    reader.readAsText(file);
+  // Shipment CSV handler — supports multiple files, accumulates into shipNameMap
+  const shipDropEl = $('shipDrop');
+  const shipFileEl = $('shipFile');
+  const shipNameEl = $('shipName');
+
+  function parseOneShipmentText(text) {
+    const lines = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    let headerIdx = lines.findIndex(l => /items?\s*name/i.test(l));
+    if (headerIdx === -1) headerIdx = 0;
+    const { rows } = parseCSV(lines.slice(headerIdx).join('\n'));
+    return parseShipmentRows(rows);
   }
-  shipFileEl.addEventListener('change', e => handleShipFile(e.target.files[0]));
+
+  function mergeShipMap(newMap) {
+    newMap.forEach((qty, name) => {
+      shipNameMap.set(name, (shipNameMap.get(name) || 0) + qty);
+    });
+  }
+
+  function handleShipFiles(files) {
+    const csvFiles = [...files].filter(f => f.name.toLowerCase().endsWith('.csv'));
+    if (!csvFiles.length) { toast('Please upload .csv files', true); return; }
+
+    let loaded = 0;
+    csvFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        mergeShipMap(parseOneShipmentText(e.target.result));
+        loaded++;
+        if (loaded === csvFiles.length) {
+          const count = csvFiles.length;
+          shipNameEl.textContent = count === 1
+            ? `✓ ${csvFiles[0].name}`
+            : `✓ ${count} shipment files loaded`;
+          shipDropEl.classList.add('loaded');
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  shipFileEl.addEventListener('change', e => handleShipFiles(e.target.files));
   shipDropEl.addEventListener('dragover', e => { e.preventDefault(); shipDropEl.classList.add('over'); });
   shipDropEl.addEventListener('dragleave', () => shipDropEl.classList.remove('over'));
-  shipDropEl.addEventListener('drop', e => { e.preventDefault(); shipDropEl.classList.remove('over'); handleShipFile(e.dataTransfer.files[0]); });
+  shipDropEl.addEventListener('drop', e => {
+    e.preventDefault(); shipDropEl.classList.remove('over');
+    handleShipFiles(e.dataTransfer.files);
+  });
 
   $('generateBtn').addEventListener('click', () => generate());
   $('clearBtn').addEventListener('click', clearAll);
