@@ -2962,6 +2962,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const csvFiles = [...files].filter(f => f.name.toLowerCase().endsWith('.csv'));
     if (!csvFiles.length) { toast('Please upload .csv files', true); return; }
 
+    // Reset map on every new upload — each upload is a complete replacement
+    shipNameMap = new Map();
+
     let loaded = 0;
     csvFiles.forEach(file => {
       const reader = new FileReader();
