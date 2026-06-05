@@ -1961,19 +1961,58 @@ function nameMatchScore(appName, shipName) {
   return hits / aWords.length;
 }
 
-function applyShipmentInbound(items, shipNameMap) {
+// Build normalizedName → itemId from the WFS inventory rows (same Walmart name source as shipments)
+function buildWFSNameMap(rows, colMap = {}) {
+  if (!rows.length) return new Map();
+  const s = rows[0];
+  const idCol   = colMap.id || findCol(s, WFS_ID_HINTS);
+  const nameCol = findCol(s, ['item_name', 'product_name', 'name', 'title', 'item', 'description', 'product']);
+  if (!idCol || !nameCol) return new Map();
+
+  const map = new Map(); // normalizedName → itemId
+  rows.forEach(row => {
+    const id   = (row[idCol]   || '').trim();
+    const name = cleanName((row[nameCol] || '').trim());
+    if (id && name) map.set(normalizeNameForMatch(name), id);
+  });
+  return map;
+}
+
+function applyShipmentInbound(items, shipNameMap, wfsNameToId = new Map()) {
   if (!shipNameMap || !shipNameMap.size) return;
-  items.forEach(item => {
-    let bestScore = 0, bestQty = 0;
+
+  // Build itemId → shippedQty using best available matching method
+  const shipInbound = new Map();
+
+  if (wfsNameToId.size) {
+    // Primary: match shipment names ↔ WFS inventory names (both from Walmart — high accuracy)
     shipNameMap.forEach((qty, shipName) => {
-      const score = nameMatchScore(item.name, shipName);
-      if (score > bestScore) { bestScore = score; bestQty = qty; }
+      const normShip = normalizeNameForMatch(shipName);
+      let bestId = null, bestScore = 0;
+      wfsNameToId.forEach((itemId, normWfsName) => {
+        const score = nameMatchScore(normWfsName, normShip);
+        if (score > bestScore) { bestScore = score; bestId = itemId; }
+      });
+      if (bestScore >= 0.70 && bestId) {
+        shipInbound.set(bestId, (shipInbound.get(bestId) || 0) + qty);
+      }
     });
-    // Only apply if confident match (≥75% of app name words found in shipment name)
-    if (bestScore >= 0.75) {
-      item.inbound = Math.max(item.inbound, bestQty);
-      item.inboundFromShipment = bestQty; // flag for potential future display
-    }
+  } else {
+    // Fallback: match shipment names against Google Sheet / sales names
+    items.forEach(item => {
+      let bestScore = 0, bestQty = 0;
+      shipNameMap.forEach((qty, shipName) => {
+        const score = nameMatchScore(item.name, shipName);
+        if (score > bestScore) { bestScore = score; bestQty = qty; }
+      });
+      if (bestScore >= 0.75) shipInbound.set(item.itemId, bestQty);
+    });
+  }
+
+  // Apply to items
+  items.forEach(item => {
+    const qty = shipInbound.get(item.itemId) || 0;
+    if (qty > 0) item.inbound = Math.max(item.inbound, qty);
   });
 }
 
@@ -2726,6 +2765,7 @@ async function generate(colMap = {}) {
         $('wfsDrop').classList.add('loaded');
       }
     }
+    let wfsNameToId = new Map();
     if (wfsSource) {
       const result = parseWFSRows(wfsSource, colMap);
       if (result.__needsMapper) {
@@ -2734,6 +2774,8 @@ async function generate(colMap = {}) {
         return;
       }
       invMap = result;
+      // Also build name→id map for accurate shipment matching
+      wfsNameToId = buildWFSNameMap(wfsSource, colMap);
     }
 
     // 3. Sales data — use manual upload, or auto-fetch from GitHub
@@ -2761,7 +2803,7 @@ async function generate(colMap = {}) {
     items = mergeData(sheetMap, invMap, velMap, weeksTarget);
 
     // Apply inbound shipment data (in-transit units not yet checked in to WFS)
-    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap);
+    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
 
     setSpinner(true, 'Loading store tags…');
     const storeData = await loadStoreData();
