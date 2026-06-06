@@ -2455,6 +2455,7 @@ function clearAllPurchases() {
   saveStoreData_raw(currentPayload());
   renderClearBoughtBtn();
   renderGrid(sortItems(items, $('sortSelect').value));
+  renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
   toast('All bought marks cleared');
 }
 
@@ -2500,6 +2501,7 @@ function confirmPurchase() {
   saveStoreData_raw(currentPayload());
   refreshPurchaseUI(buyingItemId);
   renderClearBoughtBtn();
+  renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
   closeBuySheet();
   toast(`✓ Bought ${qty} marked`);
 }
@@ -2511,6 +2513,7 @@ function unmarkPurchase() {
   saveStoreData_raw(currentPayload());
   refreshPurchaseUI(buyingItemId);
   renderClearBoughtBtn();
+  renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
   closeBuySheet();
   toast('Purchase unmarked');
 }
@@ -2657,9 +2660,17 @@ function refreshCardStore(itemId) {
 }
 
 function renderSummary(all) {
-  const totalBuy = all.reduce((s, x) => s + x.suggestBuy, 0);
-  const nCritical = all.filter(x => x.urgency === 'critical').length;
-  const nLow      = all.filter(x => x.urgency === 'low').length;
+  const totalBuy       = all.reduce((s, x) => s + x.suggestBuy, 0);
+  const critical       = all.filter(x => x.urgency === 'critical');
+  const low            = all.filter(x => x.urgency === 'low');
+  const nCritical      = critical.length;
+  const nLow           = low.length;
+  const boughtCritical = critical.filter(x => purchases[x.itemId]).length;
+  const boughtLow      = low.filter(x => purchases[x.itemId]).length;
+
+  const boughtBadge = n => n > 0
+    ? `<span style="font-size:13px;font-weight:500;color:var(--green);margin-left:4px">(${n} bought)</span>`
+    : '';
 
   $('summaryBar').innerHTML = `
     <div class="stat-pill">
@@ -2672,11 +2683,11 @@ function renderSummary(all) {
     </div>
     <div class="stat-pill">
       <div class="stat-pill-label">Out of Stock</div>
-      <div class="stat-pill-value" style="color:var(--red)">${nCritical}</div>
+      <div class="stat-pill-value" style="color:var(--red)">${nCritical}${boughtBadge(boughtCritical)}</div>
     </div>
     <div class="stat-pill">
       <div class="stat-pill-label">Running Low</div>
-      <div class="stat-pill-value" style="color:var(--orange)">${nLow}</div>
+      <div class="stat-pill-value" style="color:var(--orange)">${nLow}${boughtBadge(boughtLow)}</div>
     </div>`;
 }
 
