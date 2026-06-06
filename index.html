@@ -388,6 +388,10 @@
 
     .sort-select:focus { border-color: var(--accent-mid); }
 
+    @media (max-width: 640px) {
+      .sort-select { font-size: 12px; padding: 7px 8px; max-width: 140px; }
+    }
+
     /* ── Cards ── */
     .cards-grid {
       display: grid;
@@ -1401,10 +1405,6 @@
         <div class="section-title" id="sectionTitle"></div>
         <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
         <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
-        <div class="view-toggle">
-          <button class="view-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">⊞</button>
-          <button class="view-btn" id="viewList" onclick="setView('list')" title="List view">≡</button>
-        </div>
       </div>
       <div class="toolbar-bottom">
         <div class="search-wrap">
@@ -1417,6 +1417,10 @@
           <option value="velocity-desc">Fastest Moving</option>
           <option value="name-asc">Name A–Z</option>
         </select>
+        <div class="view-toggle">
+          <button class="view-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">⊞</button>
+          <button class="view-btn" id="viewList" onclick="setView('list')" title="List view">≡</button>
+        </div>
       </div>
     </div>
     <div id="itemsContainer"><div class="cards-grid" id="cardsGrid"></div></div>
