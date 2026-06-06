@@ -750,6 +750,56 @@
       .list-purchase-btn { grid-column: 2 / 4; grid-row: 3; width: 100%; justify-content: center; }
     }
 
+    /* ── Sale badge ── */
+    .card-sale {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin-top: 10px;
+      padding: 6px 8px;
+      background: var(--green-dim);
+      border: 1px solid rgba(26,158,69,0.15);
+      border-radius: var(--r-xs);
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--green);
+    }
+
+    .sale-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: #fff;
+      border: 1px solid rgba(26,158,69,0.2);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .list-sale {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--green);
+      margin-top: 3px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      align-items: center;
+    }
+
+    .list-sale-tag {
+      background: var(--green-dim);
+      border: 1px solid rgba(26,158,69,0.2);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 10.5px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
     /* ── Archive button ── */
     .card-archive-btn {
       position: absolute;
@@ -905,6 +955,32 @@
       background: var(--accent);
       border-color: var(--accent);
       color: #fff;
+    }
+
+    .sale-chip {
+      border-color: rgba(26,158,69,0.3);
+      color: var(--green);
+      background: var(--green-dim);
+    }
+
+    .sale-chip:hover { border-color: var(--green); }
+
+    .sale-chip.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+
+    .sale-chip-count {
+      background: rgba(255,255,255,0.35);
+      border-radius: 10px;
+      padding: 0 5px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .sale-chip.active .sale-chip-count {
+      background: rgba(255,255,255,0.3);
     }
 
     /* ── Bottom Sheet ── */
@@ -1598,6 +1674,89 @@ async function saveShipmentToCloud() {
   } catch (e) { console.error('Shipment cloud save failed', e); }
 }
 
+// ─── Flipp Sale Data ─────────────────────────────────────────────────────────
+const FLIPP_POSTAL        = '27401'; // Greensboro, NC
+const FLIPP_TARGET_STORES = ['harris teeter', 'lowes foods', 'food lion', 'publix'];
+const FLIPP_STOP          = new Set(['or','and','the','with','of','in','a','an','for','to','from','by','at','on','is','it','size','new']);
+const FLIPP_FLYERS_URL    = 'https://backflipp.wishabi.com/flipp/flyers?locale=en-US&postal_code=';
+const FLIPP_FLYER_URL     = 'https://backflipp.wishabi.com/flipp/flyers/';
+const FLIPP_HEADERS       = { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
+
+function flippNormalize(s) {
+  return (s || '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b\d+(\.\d+)?\s*(fl\s*oz|oz|lb|lbs?|count|ct|pk|pack|g\b|ml|kg)\b/g, '')
+    .replace(/\s+/g, ' ').trim()
+    .split(' ').filter(w => w.length > 1 && !FLIPP_STOP.has(w));
+}
+
+function flippMatchScore(appName, saleWords) {
+  if (!saleWords.length) return 0;
+  const appWords = new Set(flippNormalize(appName));
+  return saleWords.filter(w => appWords.has(w)).length / saleWords.length;
+}
+
+async function fetchSaleData(appItems) {
+  try {
+    const flyersRes = await fetch(FLIPP_FLYERS_URL + FLIPP_POSTAL, { headers: FLIPP_HEADERS });
+    const flyersData = await flyersRes.json();
+
+    // Find the freshest flyer for each target store (first occurrence = most recent)
+    const seen = new Set();
+    const flyers = [];
+    for (const f of flyersData.flyers || []) {
+      const m = f.merchant.toLowerCase();
+      for (const target of FLIPP_TARGET_STORES) {
+        if (m.includes(target) && !seen.has(target)) {
+          flyers.push({ store: f.merchant, id: f.id });
+          seen.add(target);
+          break;
+        }
+      }
+      if (seen.size === FLIPP_TARGET_STORES.length) break;
+    }
+
+    // Fetch all store flyers in parallel
+    const allSaleItems = [];
+    await Promise.all(flyers.map(async ({ store, id }) => {
+      try {
+        const res = await fetch(FLIPP_FLYER_URL + id, { headers: FLIPP_HEADERS });
+        const d = await res.json();
+        for (const item of d.items || []) {
+          if (!item.name) continue;
+          const priceRaw = item.price ? `$${item.price}` : (item.discount || '');
+          allSaleItems.push({ store, name: item.name, price: priceRaw, saleWords: flippNormalize(item.name) });
+        }
+      } catch (_) {}
+    }));
+
+    // Match each app item against all sale items
+    const newSaleMap = {};
+    for (const appItem of appItems) {
+      const byStore = {};
+      for (const saleItem of allSaleItems) {
+        const s = flippMatchScore(appItem.name, saleItem.saleWords);
+        if (s >= 0.65) {
+          const existing = byStore[saleItem.store];
+          if (!existing || s > existing.score) {
+            byStore[saleItem.store] = { store: saleItem.store, saleName: saleItem.name, price: saleItem.price, score: s };
+          }
+        }
+      }
+      const matches = Object.values(byStore);
+      if (matches.length) newSaleMap[appItem.itemId] = matches;
+    }
+
+    saleMap = newSaleMap;
+    const count = Object.keys(saleMap).length;
+    renderFilterChips();
+    renderGrid(sortItems(items, $('sortSelect').value));
+    if (count) toast(`🏷️ ${count} items on sale this week`);
+  } catch (e) {
+    console.warn('Flipp sale data fetch failed', e);
+  }
+}
+
 // ─── State ───────────────────────────────────────────────────────────────────
 let wfsRows  = null;   // raw parsed CSV rows
 let sbRows   = null;
@@ -1612,6 +1771,7 @@ let activeFilter = null;     // currently selected store filter
 let viewMode     = 'grid';   // 'grid' | 'list'
 let purchases    = {};       // { itemId: { qty, ts } }
 let buyingItemId = null;     // item being marked in buy sheet
+let saleMap      = {};       // { itemId: [{ store, saleName, price }] }
 let editingItemId = null; // item being tagged
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
@@ -2251,12 +2411,31 @@ function renderCard(item, delay = 0) {
         <span class="price-label">Typical buy price</span>
         <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
       </div>
+      ${saleBadgeHtml(item.itemId)}
       <div class="card-store">
         ${storeTagBtn(item.itemId)}
         ${purchaseBtnHtml(item.itemId, false)}
       </div>
     </div>`;
   return el;
+}
+
+function saleBadgeHtml(itemId) {
+  const sales = saleMap[itemId];
+  if (!sales || !sales.length) return '';
+  const tags = sales.map(s =>
+    `<span class="sale-tag">${escHtml(s.store)}${s.price ? ' · ' + escHtml(s.price) : ''}</span>`
+  ).join('');
+  return `<div class="card-sale">🏷️ On Sale — ${tags}</div>`;
+}
+
+function listSaleBadgeHtml(itemId) {
+  const sales = saleMap[itemId];
+  if (!sales || !sales.length) return '';
+  const tags = sales.map(s =>
+    `<span class="list-sale-tag">${escHtml(s.store)}${s.price ? ' · ' + escHtml(s.price) : ''}</span>`
+  ).join('');
+  return `<div class="list-sale">🏷️ ${tags}</div>`;
 }
 
 function storeTagBtn(itemId) {
@@ -2332,6 +2511,7 @@ function renderListRow(item, delay = 0) {
     <div class="list-name-col">
       <div class="list-name">${escHtml(item.name)}</div>
       <div class="list-id">${escHtml(item.itemId)}</div>
+      ${listSaleBadgeHtml(item.itemId)}
     </div>
     <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
     <div class="list-stats-group">
@@ -2378,9 +2558,12 @@ function renderList(visibleItems) {
 }
 
 function renderGrid(sortedItems) {
-  let visible = activeFilter
-    ? sortedItems.filter(x => (storeTags[x.itemId] || []).includes(activeFilter))
-    : sortedItems;
+  let visible = sortedItems;
+  if (activeFilter === '__sale__') {
+    visible = visible.filter(x => saleMap[x.itemId]);
+  } else if (activeFilter) {
+    visible = visible.filter(x => (storeTags[x.itemId] || []).includes(activeFilter));
+  }
   if (!showArchived) visible = visible.filter(x => !archivedIds.has(x.itemId));
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
@@ -2389,7 +2572,8 @@ function renderGrid(sortedItems) {
     );
   }
 
-  $('sectionTitle').textContent = `${visible.length} item${visible.length !== 1 ? 's' : ''}${activeFilter ? ' · ' + activeFilter : ''}`;
+  const filterLabel = activeFilter === '__sale__' ? ' · On Sale' : activeFilter ? ' · ' + activeFilter : '';
+  $('sectionTitle').textContent = `${visible.length} item${visible.length !== 1 ? 's' : ''}${filterLabel}`;
   renderArchivedToggle();
   renderClearBoughtBtn();
 
@@ -2561,13 +2745,23 @@ function refreshPurchaseUI(itemId) {
 // ─── Store Filter Chips ────────────────────────────────────────────────────────
 function renderFilterChips() {
   const stores = [...new Set(Object.values(storeTags).flat())].filter(Boolean).sort();
+  const saleCount = Object.keys(saleMap).length;
   const bar = $('storeFilters');
-  if (!stores.length) { bar.style.display = 'none'; return; }
+  if (!stores.length && !saleCount) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
-  bar.innerHTML = ['All', ...stores].map(s =>
-    `<button class="filter-chip${(!activeFilter && s === 'All') || activeFilter === s ? ' active' : ''}"
-       onclick="setFilter(${s === 'All' ? 'null' : `'${escHtml(s)}'`})">${s !== 'All' ? storeLogoImg(s, 14) + ' ' : ''}${escHtml(s)}</button>`
+
+  const allActive  = !activeFilter;
+  const saleActive = activeFilter === '__sale__';
+
+  let html = `<button class="filter-chip${allActive ? ' active' : ''}" onclick="setFilter(null)">All</button>`;
+  if (saleCount) {
+    html += `<button class="filter-chip sale-chip${saleActive ? ' active' : ''}" onclick="setFilter('__sale__')">🏷️ On Sale <span class="sale-chip-count">${saleCount}</span></button>`;
+  }
+  html += stores.map(s =>
+    `<button class="filter-chip${activeFilter === s ? ' active' : ''}"
+       onclick="setFilter('${escHtml(s)}')">${storeLogoImg(s, 14) + ' '}${escHtml(s)}</button>`
   ).join('');
+  bar.innerHTML = html;
 }
 
 function setFilter(store) {
@@ -2575,9 +2769,14 @@ function setFilter(store) {
   renderFilterChips();
   const sorted = sortItems(items, $('sortSelect').value);
   renderGrid(sorted);
-  const summaryItems = activeFilter
-    ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
-    : items;
+  let summaryItems;
+  if (activeFilter === '__sale__') {
+    summaryItems = items.filter(x => saleMap[x.itemId] && !archivedIds.has(x.itemId));
+  } else if (activeFilter) {
+    summaryItems = items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId));
+  } else {
+    summaryItems = items;
+  }
   renderSummary(summaryItems);
 }
 
@@ -2882,6 +3081,9 @@ async function generate(colMap = {}) {
     const needsImg = sorted.filter(x => !x.image);
     if (needsImg.length) enrichImagesProgressively(needsImg);
 
+    // Fetch weekly sale data from Flipp (non-blocking — updates cards when ready)
+    fetchSaleData(items);
+
   } catch (err) {
     setSpinner(false);
     toast(err.message, true);
@@ -2967,6 +3169,7 @@ function clearAll() {
   ['wfsName', 'sbName', 'shipName'].forEach(id => { $(id).textContent = ''; });
   ['wfsDrop', 'sbDrop', 'shipDrop'].forEach(id => { $(id).classList.remove('loaded'); });
   shipNameMap = new Map();
+  saleMap = {};
 
   $('results').style.display    = 'none';
   $('wfsMapper').style.display  = 'none';
