@@ -2423,18 +2423,14 @@ function renderCard(item, delay = 0) {
 function saleBadgeHtml(itemId) {
   const sales = saleMap[itemId];
   if (!sales || !sales.length) return '';
-  const tags = sales.map(s =>
-    `<span class="sale-tag">${escHtml(s.store)}${s.price ? ' · ' + escHtml(s.price) : ''}</span>`
-  ).join('');
+  const tags = sales.map(s => `<span class="sale-tag">${escHtml(s.store)}</span>`).join('');
   return `<div class="card-sale">🏷️ On Sale — ${tags}</div>`;
 }
 
 function listSaleBadgeHtml(itemId) {
   const sales = saleMap[itemId];
   if (!sales || !sales.length) return '';
-  const tags = sales.map(s =>
-    `<span class="list-sale-tag">${escHtml(s.store)}${s.price ? ' · ' + escHtml(s.price) : ''}</span>`
-  ).join('');
+  const tags = sales.map(s => `<span class="list-sale-tag">${escHtml(s.store)}</span>`).join('');
   return `<div class="list-sale">🏷️ ${tags}</div>`;
 }
 
