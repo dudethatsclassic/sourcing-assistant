@@ -315,10 +315,21 @@
     /* ── Toolbar ── */
     .toolbar {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      gap: 8px;
       margin-bottom: 14px;
-      flex-wrap: wrap;
+    }
+
+    .toolbar-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-bottom {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .section-title {
@@ -339,7 +350,7 @@
       color: var(--text);
       outline: none;
       transition: border-color 0.15s, box-shadow 0.15s;
-      width: 200px;
+      width: 100%;
     }
 
     .search-input:focus {
@@ -351,6 +362,7 @@
       position: relative;
       display: flex;
       align-items: center;
+      flex: 1;
     }
 
     .search-wrap .search-icon {
@@ -1309,22 +1321,26 @@
     <div class="summary-bar" id="summaryBar"></div>
     <div class="store-filters" id="storeFilters"></div>
     <div class="toolbar">
-      <div class="section-title" id="sectionTitle"></div>
-      <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
-      <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="search" class="search-input" id="searchInput" placeholder="Search SKUs…" autocomplete="off">
+      <div class="toolbar-top">
+        <div class="section-title" id="sectionTitle"></div>
+        <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
+        <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
+        <div class="view-toggle">
+          <button class="view-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">⊞</button>
+          <button class="view-btn" id="viewList" onclick="setView('list')" title="List view">≡</button>
+        </div>
       </div>
-      <select class="sort-select" id="sortSelect">
-        <option value="stock-asc">Lowest Stock First</option>
-        <option value="buy-desc">Most to Buy First</option>
-        <option value="velocity-desc">Fastest Moving</option>
-        <option value="name-asc">Name A–Z</option>
-      </select>
-      <div class="view-toggle">
-        <button class="view-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">⊞</button>
-        <button class="view-btn" id="viewList" onclick="setView('list')" title="List view">≡</button>
+      <div class="toolbar-bottom">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" id="searchInput" placeholder="Search SKUs…" autocomplete="off">
+        </div>
+        <select class="sort-select" id="sortSelect">
+          <option value="stock-asc">Lowest Stock First</option>
+          <option value="buy-desc">Most to Buy First</option>
+          <option value="velocity-desc">Fastest Moving</option>
+          <option value="name-asc">Name A–Z</option>
+        </select>
       </div>
     </div>
     <div id="itemsContainer"><div class="cards-grid" id="cardsGrid"></div></div>
