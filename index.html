@@ -2554,7 +2554,12 @@ function renderFilterChips() {
 function setFilter(store) {
   activeFilter = store;
   renderFilterChips();
-  renderGrid(sortItems(items, $('sortSelect').value));
+  const sorted = sortItems(items, $('sortSelect').value);
+  renderGrid(sorted);
+  const summaryItems = activeFilter
+    ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
+    : items;
+  renderSummary(summaryItems);
 }
 
 // ─── Store Sheet ──────────────────────────────────────────────────────────────
