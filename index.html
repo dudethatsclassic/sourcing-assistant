@@ -459,6 +459,7 @@
     .badge-critical { background: var(--red-dim); color: var(--red); }
     .badge-low      { background: var(--orange-dim); color: var(--orange); }
     .badge-ok       { background: var(--green-dim); color: var(--green); }
+    .badge-new      { background: #eef; color: #55c; border: 1px solid #d0d0f0; }
 
     /* Card body */
     .card-body { padding: 15px 16px 16px; }
@@ -2090,24 +2091,39 @@ function parseSalesRows(rows) {
     }
   });
 
-  // Calculate date range across all orders for the denominator
+  // Global date range — used as denominator for established items
   let allDates = [];
   totals.forEach(e => { allDates = allDates.concat(e.dates); });
-  let weeksInRange = 12; // fallback: assume 12 weeks if no dates
+  let globalWeeks = 12; // fallback
+  let globalMaxMs = Date.now();
   if (allDates.length >= 2) {
-    const minD = Math.min(...allDates.map(d => d.getTime()));
-    const maxD = Math.max(...allDates.map(d => d.getTime()));
-    const days = (maxD - minD) / (1000 * 60 * 60 * 24);
-    weeksInRange = Math.max(1, days / 7);
+    const minD   = Math.min(...allDates.map(d => d.getTime()));
+    globalMaxMs  = Math.max(...allDates.map(d => d.getTime()));
+    globalWeeks  = Math.max(1, (globalMaxMs - minD) / (1000 * 60 * 60 * 24 * 7));
   }
+
+  // Items whose first sale is within this many days are considered "new"
+  const NEW_ITEM_DAYS = 45;
 
   const map = new Map();
   totals.forEach((entry, id) => {
-    map.set(id, {
-      itemId: id,
-      weeklySold: entry.units / weeksInRange,
-      name: entry.name,
-    });
+    let weeklySold = entry.units / globalWeeks;
+    let isNew = false;
+
+    if (entry.dates.length) {
+      const itemMinMs = Math.min(...entry.dates.map(d => d.getTime()));
+      const itemMaxMs = Math.max(...entry.dates.map(d => d.getTime()));
+      const daysSinceFirst = (globalMaxMs - itemMinMs) / (1000 * 60 * 60 * 24);
+
+      if (daysSinceFirst <= NEW_ITEM_DAYS) {
+        // Use item's own sales window — minimum 7 days to avoid single-day spikes
+        const itemDays = Math.max(7, (itemMaxMs - itemMinMs) / (1000 * 60 * 60 * 24));
+        weeklySold = entry.units / (itemDays / 7);
+        isNew = true;
+      }
+    }
+
+    map.set(id, { itemId: id, weeklySold, name: entry.name, isNew });
   });
   return map;
 }
@@ -2250,6 +2266,7 @@ function mergeData(sheetMap, invMap, velMap, weeksTarget) {
       minPrice,
       maxPrice,
       urgency,
+      isNew: vel.isNew || false,
       image: sheet.image || null,   // prefilled from sheet; replaced by Walmart fetch if null
     });
   });
@@ -2386,6 +2403,7 @@ function renderCard(item, delay = 0) {
     <div class="card-img">
       ${imgTag(item)}
       <div class="badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+      ${item.isNew ? '<div class="badge badge-new" style="top:10px;left:10px;right:auto">🆕 New</div>' : ''}
       <button class="card-archive-btn" onclick="toggleArchive('${escHtml(item.itemId)}')"
         title="${archivedIds.has(item.itemId) ? 'Restore SKU' : 'Hide SKU'}"
       >${archivedIds.has(item.itemId) ? '↩' : '✕'}</button>
@@ -2513,7 +2531,10 @@ function renderListRow(item, delay = 0) {
       <div class="list-id">${escHtml(item.itemId)}</div>
       ${listSaleBadgeHtml(item.itemId)}
     </div>
-    <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+    <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+      <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+      ${item.isNew ? '<div class="list-badge badge-new">🆕 New</div>' : ''}
+    </div>
     <div class="list-stats-group">
       <div class="list-stat">
         <span class="list-stat-label">In Stock</span>
