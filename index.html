@@ -2257,6 +2257,9 @@ async function fetchFlippSaleData(appItems) {
 
 // ─── Kroger API (Harris Teeter) ───────────────────────────────────────────────
 // Credentials stored in localStorage — never in code. Use ⚙️ Settings to configure.
+// KROGER_PROXY: URL of your deployed Cloudflare Worker (kroger-worker.js).
+// Leave empty to disable HT sale checking until the Worker is deployed.
+const KROGER_PROXY  = 'https://kroger-proxy.natescottsmith.workers.dev';
 const KROGER_HT_ZIP = '27401';
 const KROGER_LS_ID  = 'sourcing_kroger_id';
 const KROGER_LS_SEC = 'sourcing_kroger_sec';
@@ -2306,7 +2309,7 @@ async function krogerGetToken() {
   if (_krogerToken && Date.now() < _krogerTokenExp) return _krogerToken;
   const { id, sec } = krogerCreds();
   const creds = btoa(`${id}:${sec}`);
-  const res = await fetch('https://api.kroger.com/v1/connect/oauth2/token', {
+  const res = await fetch(`${KROGER_PROXY}/v1/connect/oauth2/token`, {
     method: 'POST',
     headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'grant_type=client_credentials&scope=product.compact',
@@ -2321,7 +2324,7 @@ async function krogerGetToken() {
 async function krogerGetHTLocation(token) {
   if (_krogerLocId) return _krogerLocId;
   const res = await fetch(
-    `https://api.kroger.com/v1/locations?filter.chain=HarrisTeeter&filter.zipCode=${KROGER_HT_ZIP}&filter.limit=5`,
+    `${KROGER_PROXY}/v1/locations?filter.chain=HarrisTeeter&filter.zipCode=${KROGER_HT_ZIP}&filter.limit=5`,
     { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
   );
   if (!res.ok) throw new Error(`Kroger locations ${res.status}`);
@@ -2331,6 +2334,7 @@ async function krogerGetHTLocation(token) {
 }
 
 async function fetchKrogerHTSaleData(appItems) {
+  if (!KROGER_PROXY || KROGER_PROXY.includes('YOURNAME')) return {}; // Worker not yet deployed
   const { id, sec } = krogerCreds();
   if (!id || !sec) return {};
   try {
@@ -2358,7 +2362,7 @@ async function fetchKrogerHTSaleData(appItems) {
       try {
         const term = encodeURIComponent(item.name.slice(0, 50).trim());
         const res  = await fetch(
-          `https://api.kroger.com/v1/products?filter.term=${term}&filter.locationId=${locationId}&filter.limit=5`,
+          `${KROGER_PROXY}/v1/products?filter.term=${term}&filter.locationId=${locationId}&filter.limit=5`,
           { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
         );
         if (!res.ok) { errorCount++; await new Promise(r => setTimeout(r, 300)); continue; }
