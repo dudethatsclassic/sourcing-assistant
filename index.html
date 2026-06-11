@@ -2334,16 +2334,25 @@ async function fetchKrogerHTSaleData(appItems) {
   const { id, sec } = krogerCreds();
   if (!id || !sec) return {};
   try {
-    const token      = await krogerGetToken();
+    const token = await krogerGetToken();
     const locationId = await krogerGetHTLocation(token);
-    if (!locationId) { console.warn('No Harris Teeter found near', KROGER_HT_ZIP); return {}; }
+    if (!locationId) {
+      toast('Harris Teeter: no store found near ' + KROGER_HT_ZIP, true);
+      return {};
+    }
 
-    // Only search items that are tagged to a Harris Teeter store
+    // Only search items tagged to a Harris Teeter store
     const htItems = appItems.filter(x =>
       (storeTags[x.itemId] || []).some(s => s.toLowerCase().includes('harris teeter'))
     );
 
+    if (!htItems.length) {
+      toast('Harris Teeter: no items tagged to HT found', true);
+      return {};
+    }
+
     const result = {};
+    let errorCount = 0;
     for (const item of htItems) {
       try {
         const term = encodeURIComponent(item.name.slice(0, 50).trim());
@@ -2351,19 +2360,21 @@ async function fetchKrogerHTSaleData(appItems) {
           `https://api.kroger.com/v1/products?filter.term=${term}&filter.locationId=${locationId}&filter.limit=5&filter.fulfillment=ais`,
           { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
         );
-        if (!res.ok) { await new Promise(r => setTimeout(r, 300)); continue; }
+        if (!res.ok) { errorCount++; await new Promise(r => setTimeout(r, 300)); continue; }
         const d = await res.json();
         const onSale = (d.data || []).some(p => (p.items || []).some(pi => pi.price?.promo != null));
         if (onSale) {
           result[item.itemId] = [{ store: 'Harris Teeter', saleName: (d.data[0]?.description || item.name), score: 1, source: 'kroger' }];
         }
-        // Rate-limit: 5 req/s max
         await new Promise(r => setTimeout(r, 220));
-      } catch (_) {}
+      } catch (e) { errorCount++; }
+    }
+    if (errorCount === htItems.length) {
+      toast('Harris Teeter API: all product searches failed — check credentials', true);
     }
     return result;
   } catch (e) {
-    console.warn('Kroger API failed:', e);
+    toast(`Harris Teeter API error: ${e.message}`, true);
     return {};
   }
 }
