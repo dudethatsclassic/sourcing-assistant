@@ -2779,6 +2779,49 @@ function parseSalesRows(rows) {
   return map;
 }
 
+// ─── Sales Data Insights Parser (aggregated 12-month report) ─────────────────
+// Format: one row per item with Item_Name, Item_id, Units_Sold, etc.
+// No individual order dates — uses a fixed 52-week denominator.
+function parseInsightsRows(rows) {
+  if (!rows.length) return new Map();
+  const HISTORY_WEEKS = 52;
+  const s = rows[0];
+
+  const idCol    = findCol(s, ['item_id', 'Item_id', 'itemid', 'item_Id']);
+  const unitsCol = findCol(s, ['units_sold', 'Units_Sold', 'unitssold']);
+  const nameCol  = findCol(s, ['item_name', 'Item_Name', 'itemname']);
+
+  if (!idCol || !unitsCol) return new Map();
+
+  const map = new Map();
+  for (const row of rows) {
+    const rawId = (row[idCol] || '').toString().trim().replace(/\.0$/, '');
+    if (!rawId || rawId === '0') continue;
+
+    const units = parseFloat(row[unitsCol] || 0) || 0;
+    if (units <= 0) continue; // skip zero/refund-only rows — no useful velocity
+
+    const name       = nameCol ? (row[nameCol] || '').trim() : '';
+    const weeklySold = units / HISTORY_WEEKS;
+
+    // Never flag as new — aggregated report has no date info for new-item detection
+    map.set(rawId, { itemId: rawId, weeklySold, name, isNew: false });
+  }
+  return map;
+}
+
+// Auto-detect which history format was uploaded and parse accordingly
+function parseHistoryRows(rows) {
+  if (!rows.length) return new Map();
+  const s = rows[0];
+  // Sales Data Insights: has Item_id + Units_Sold (aggregated, one row per item)
+  const hasItemId    = findCol(s, ['item_id', 'Item_id', 'itemid']);
+  const hasUnitsSold = findCol(s, ['units_sold', 'Units_Sold', 'unitssold']);
+  if (hasItemId && hasUnitsSold) return parseInsightsRows(rows);
+  // Otherwise: standard order-level export (same format as 90-day Sales Data)
+  return parseSalesRows(rows);
+}
+
 // ─── Inbound Shipment Parser ──────────────────────────────────────────────────
 function parseShipmentRows(rows) {
   // The WFS shipment export has 3 metadata lines then a real header:
@@ -4026,7 +4069,7 @@ async function generate(colMap = {}) {
       }
     }
     if (histSource) {
-      longVelMap = parseSalesRows(histSource);
+      longVelMap = parseHistoryRows(histSource);
     }
 
     if (!sheetMap.size && !invMap.size && !velMap.size) {
