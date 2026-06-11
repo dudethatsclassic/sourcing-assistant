@@ -2729,8 +2729,11 @@ function parseSalesRows(rows) {
       const salesSpanDays  = (itemMaxMs - itemMinMs)   / (1000 * 60 * 60 * 24);
 
       if (daysSinceFirst <= NEW_ITEM_THRESHOLD_DAYS && salesSpanDays <= NEW_ITEM_MAX_SPAN_DAYS) {
-        // Use item's own sales window — minimum 7 days to avoid single-day spikes
-        const itemDays = Math.max(7, salesSpanDays);
+        // Use time-since-first-sale as denominator, not sales span.
+        // A test batch of 6 units selling in 2 days shouldn't read as 6/wk —
+        // spread over the 20 days since launch it becomes ~2/wk, which is honest.
+        // Minimum 14 days so very fresh items don't get artificially boosted.
+        const itemDays = Math.max(14, daysSinceFirst);
         weeklySold = entry.units / (itemDays / 7);
         isNew = true;
       }
