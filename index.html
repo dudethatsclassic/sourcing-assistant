@@ -3219,16 +3219,17 @@ function copyShoppingList() {
   if (needToBuy.length) {
     lines.push('NEED TO BUY');
     needToBuy.forEach(item => {
-      const check = purchases[item.itemId] ? '✓' : '☐';
-      const sale  = saleMap[item.itemId]?.some(s => s.store === store) ? ' 🏷️' : '';
-      lines.push(`${check} ${item.name} × ${item.suggestBuy}${sale}`);
+      const check = purchases[item.itemId] ? '[x]' : '[ ]';
+      const qty   = shoppingQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy);
+      const sale  = saleMap[item.itemId]?.some(s => s.store === store) ? ' (sale)' : '';
+      lines.push(`${check} ${item.name} x${qty}${sale}`);
     });
   }
   if (onSaleOnly.length) {
     if (needToBuy.length) lines.push('');
     lines.push('ON SALE — ALREADY STOCKED');
     onSaleOnly.forEach(item => {
-      lines.push(`☐ ${item.name} 🏷️`);
+      lines.push(`[ ] ${item.name} (sale)`);
     });
   }
 
