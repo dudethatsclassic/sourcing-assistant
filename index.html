@@ -1170,6 +1170,47 @@
       margin-top: 1px;
     }
 
+    .shopping-stepper {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .shopping-step-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: none;
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+      transition: background 0.1s;
+      flex-shrink: 0;
+    }
+    .shopping-step-btn:active { background: var(--accent-dim); }
+
+    .shopping-step-val {
+      min-width: 32px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      padding: 0 4px;
+      line-height: 36px;
+    }
+
     .shopping-empty {
       text-align: center;
       padding: 48px 24px;
@@ -1999,6 +2040,7 @@ let viewMode     = 'grid';   // 'grid' | 'list'
 let purchases    = {};       // { itemId: { qty, ts } }
 let buyingItemId = null;     // item being marked in buy sheet
 let saleMap      = {};       // { itemId: [{ store, saleName, price }] }
+let shoppingQtys = {};       // { itemId: qty } — pending qty adjustments in shopping mode
 let editingItemId = null; // item being tagged
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
@@ -3070,6 +3112,7 @@ function enterShoppingMode(store) {
   $('shoppingBody').innerHTML = html;
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
+  shoppingQtys = {}; // reset pending qty adjustments
 }
 
 function shoppingItemHtml(item, store) {
@@ -3083,6 +3126,14 @@ function shoppingItemHtml(item, store) {
     ? `<span style="font-size:11px;color:var(--green);font-weight:600">🏷️ On Sale</span>` : '';
   const isNew = item.isNew ? `<span style="font-size:11px;color:#55c;font-weight:600">🆕 New</span>` : '';
 
+  const currentQty = shoppingQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
+  const stepperHtml = item.suggestBuy > 0 || isBought ? `
+    <div class="shopping-stepper" onclick="event.stopPropagation()">
+      <button class="shopping-step-btn" onclick="adjustShoppingQty('${escHtml(item.itemId)}', -1, '${escHtml(store)}')">−</button>
+      <span class="shopping-step-val" id="sqv_${escHtml(item.itemId)}">${currentQty}</span>
+      <button class="shopping-step-btn" onclick="adjustShoppingQty('${escHtml(item.itemId)}', 1, '${escHtml(store)}')">+</button>
+    </div>` : '';
+
   return `
     <div class="shopping-item${isBought ? ' is-checked' : ''}" data-id="${escHtml(item.itemId)}" onclick="toggleShoppingItem('${escHtml(item.itemId)}', '${escHtml(store)}')">
       <div class="shopping-check">${isBought ? '✓' : ''}</div>
@@ -3090,12 +3141,27 @@ function shoppingItemHtml(item, store) {
         <div class="shopping-item-name">${escHtml(item.name)}</div>
         <div class="shopping-item-sub">${urgencyHtml}${saleHtml}${isNew}</div>
       </div>
-      ${item.suggestBuy > 0 ? `
-        <div style="text-align:right;flex-shrink:0">
-          <div class="shopping-qty">×${item.suggestBuy}</div>
-          <div class="shopping-qty-label">to buy</div>
-        </div>` : ''}
+      ${stepperHtml}
     </div>`;
+}
+
+function adjustShoppingQty(itemId, delta, store) {
+  const item = items.find(x => x.itemId === itemId);
+  const current = shoppingQtys[itemId] ?? (purchases[itemId]?.qty || item?.suggestBuy || 1);
+  const newQty  = Math.max(1, current + delta);
+  shoppingQtys[itemId] = newQty;
+
+  // Update display
+  const valEl = document.getElementById('sqv_' + itemId);
+  if (valEl) valEl.textContent = newQty;
+
+  // If already checked, update purchase qty immediately
+  if (purchases[itemId]) {
+    purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
+    saveLocal();
+    saveStoreData_raw(currentPayload());
+    refreshPurchaseUI(itemId);
+  }
 }
 
 function toggleShoppingItem(itemId, store) {
@@ -3103,7 +3169,8 @@ function toggleShoppingItem(itemId, store) {
     delete purchases[itemId];
   } else {
     const item = items.find(x => x.itemId === itemId);
-    purchases[itemId] = { qty: item ? item.suggestBuy || 1 : 1, ts: Date.now() };
+    const qty  = shoppingQtys[itemId] ?? (item?.suggestBuy || 1);
+    purchases[itemId] = { qty, ts: Date.now() };
   }
   saveLocal();
   saveStoreData_raw(currentPayload());
