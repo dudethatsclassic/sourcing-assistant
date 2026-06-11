@@ -2951,12 +2951,14 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
     const shortVel = velMap.get(id)   || { itemId: id, weeklySold: 0, isNew: false };
     const longVel  = longVelMap?.get(id);
 
-    // Use long-term velocity for established items — more data = less noise.
-    // If the item isn't flagged as "new" in the historical data, it's established
-    // and the long-term average is more reliable than the 90-day window.
+    // Velocity selection:
+    // - If item has long-term history: use the HIGHER of long-term vs 90-day.
+    //   Long-term wins when short-term has a fluke spike (smooths it down).
+    //   Short-term wins when the item is genuinely trending up (catches momentum).
+    // - If item has no long-term data: use 90-day as-is (includes new-item logic).
     let weekly, isNew;
     if (longVel && !longVel.isNew) {
-      weekly = longVel.weeklySold;
+      weekly = Math.max(longVel.weeklySold, shortVel.weeklySold);
       isNew  = false;
     } else {
       weekly = shortVel.weeklySold;
