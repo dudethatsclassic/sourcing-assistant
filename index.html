@@ -2366,8 +2366,13 @@ function parseSalesRows(rows) {
     globalWeeks  = Math.max(1, (globalMaxMs - minD) / (1000 * 60 * 60 * 24 * 7));
   }
 
-  // Items whose first sale is within this many days are considered "new"
-  const NEW_ITEM_DAYS = 45;
+  // An item is "new" only if:
+  //   1. First sale is within 45 days of the most recent order (recently appeared)
+  //   2. Its entire sales history spans fewer than 30 days (truly short track record)
+  // This prevents slow established sellers whose recent sale happens to fall in the
+  // window from being misidentified as new items.
+  const NEW_ITEM_THRESHOLD_DAYS  = 45;
+  const NEW_ITEM_MAX_SPAN_DAYS   = 30;
 
   const map = new Map();
   totals.forEach((entry, id) => {
@@ -2375,13 +2380,14 @@ function parseSalesRows(rows) {
     let isNew = false;
 
     if (entry.dates.length) {
-      const itemMinMs = Math.min(...entry.dates.map(d => d.getTime()));
-      const itemMaxMs = Math.max(...entry.dates.map(d => d.getTime()));
+      const itemMinMs      = Math.min(...entry.dates.map(d => d.getTime()));
+      const itemMaxMs      = Math.max(...entry.dates.map(d => d.getTime()));
       const daysSinceFirst = (globalMaxMs - itemMinMs) / (1000 * 60 * 60 * 24);
+      const salesSpanDays  = (itemMaxMs - itemMinMs)   / (1000 * 60 * 60 * 24);
 
-      if (daysSinceFirst <= NEW_ITEM_DAYS) {
+      if (daysSinceFirst <= NEW_ITEM_THRESHOLD_DAYS && salesSpanDays <= NEW_ITEM_MAX_SPAN_DAYS) {
         // Use item's own sales window — minimum 7 days to avoid single-day spikes
-        const itemDays = Math.max(7, (itemMaxMs - itemMinMs) / (1000 * 60 * 60 * 24));
+        const itemDays = Math.max(7, salesSpanDays);
         weeklySold = entry.units / (itemDays / 7);
         isNew = true;
       }
