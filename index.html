@@ -895,6 +895,93 @@
     .archived-toggle:hover { border-color: var(--muted-light); color: var(--text); }
     .archived-toggle.showing { background: var(--accent-dim); border-color: var(--accent-dim2); color: var(--accent); }
 
+    /* ── Settings button ── */
+    .settings-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .settings-btn:hover { border-color: var(--muted-light); color: var(--text); }
+    .settings-btn.configured { border-color: rgba(26,158,69,0.3); color: var(--green); background: var(--green-dim); }
+
+    /* ── Settings modal ── */
+    .settings-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 900;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .settings-backdrop.open { display: flex; }
+    .settings-modal {
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .settings-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .settings-subtitle {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .settings-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 5px;
+    }
+    .settings-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-xs);
+      font-size: 13px;
+      font-family: monospace;
+      background: var(--surface2);
+      color: var(--text);
+      margin-bottom: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .settings-input:focus { border-color: var(--accent-mid); background: #fff; }
+    .settings-note {
+      font-size: 11.5px;
+      color: var(--muted);
+      background: var(--surface2);
+      border-radius: var(--r-xs);
+      padding: 8px 10px;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+    .settings-actions {
+      display: flex;
+      gap: 8px;
+    }
+
     /* ── Column Mapper ── */
     .mapper-banner {
       background: #fffcf0;
@@ -1694,6 +1781,7 @@
         <div class="section-title" id="sectionTitle"></div>
         <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
         <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
+        <button class="settings-btn" id="settingsBtn" onclick="openSettings()" title="API Settings">⚙️</button>
       </div>
       <div class="toolbar-bottom">
         <div class="search-wrap">
@@ -1768,6 +1856,25 @@
   <div class="sheet-actions" style="margin-top:10px">
     <button class="btn btn-ghost" onclick="closeBuySheet()" style="flex:1">Cancel</button>
     <button class="btn btn-ghost btn-remove" id="unmarkBtn" onclick="unmarkPurchase()" style="display:none">Unmark</button>
+  </div>
+</div>
+
+<!-- ── Settings Modal ── -->
+<div class="settings-backdrop" id="settingsBackdrop" onclick="closeSettings(event)">
+  <div class="settings-modal" onclick="event.stopPropagation()">
+    <div class="settings-title">⚙️ API Settings</div>
+    <div class="settings-subtitle">Kroger credentials for Harris Teeter live sale data.<br>Stored on this device only — never sent to GitHub.</div>
+    <div class="settings-label">Client ID</div>
+    <input class="settings-input" id="settingsClientId" type="password" placeholder="Paste your Client ID…" autocomplete="off" spellcheck="false">
+    <div class="settings-label">Client Secret</div>
+    <input class="settings-input" id="settingsClientSecret" type="password" placeholder="Paste your Client Secret…" autocomplete="off" spellcheck="false">
+    <div class="settings-note">
+      🔒 Saved to your browser's localStorage — not in the code, not on GitHub. Clear browser data to remove them.
+    </div>
+    <div class="settings-actions">
+      <button class="btn btn-ghost" onclick="closeSettings()" style="flex:1">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()" style="flex:2;justify-content:center;display:flex">Save</button>
+    </div>
   </div>
 </div>
 
@@ -2067,10 +2174,47 @@ async function fetchFlippSaleData(appItems) {
 }
 
 // ─── Kroger API (Harris Teeter) ───────────────────────────────────────────────
-// Register at developer.kroger.com → Create App → scope: product.compact
-const KROGER_CLIENT_ID     = '';   // ← paste your client_id here
-const KROGER_CLIENT_SECRET = '';   // ← paste your client_secret here
-const KROGER_HT_ZIP        = '27401';
+// Credentials stored in localStorage — never in code. Use ⚙️ Settings to configure.
+const KROGER_HT_ZIP = '27401';
+const KROGER_LS_ID  = 'sourcing_kroger_id';
+const KROGER_LS_SEC = 'sourcing_kroger_sec';
+
+function krogerCreds() {
+  return {
+    id:  localStorage.getItem(KROGER_LS_ID)  || '',
+    sec: localStorage.getItem(KROGER_LS_SEC) || '',
+  };
+}
+
+// ─── Settings Modal ───────────────────────────────────────────────────────────
+function openSettings() {
+  const { id, sec } = krogerCreds();
+  $('settingsClientId').value     = id;
+  $('settingsClientSecret').value = sec;
+  $('settingsBackdrop').classList.add('open');
+}
+function closeSettings(e) {
+  if (e && e.target !== $('settingsBackdrop')) return;
+  $('settingsBackdrop').classList.remove('open');
+}
+function saveSettings() {
+  const id  = $('settingsClientId').value.trim();
+  const sec = $('settingsClientSecret').value.trim();
+  if (id)  localStorage.setItem(KROGER_LS_ID,  id);  else localStorage.removeItem(KROGER_LS_ID);
+  if (sec) localStorage.setItem(KROGER_LS_SEC, sec); else localStorage.removeItem(KROGER_LS_SEC);
+  updateSettingsBtn();
+  $('settingsBackdrop').classList.remove('open');
+  // Reset cached token so it re-authenticates with new creds
+  _krogerToken = null; _krogerTokenExp = 0; _krogerLocId = null;
+  toast(id && sec ? '✓ Kroger API credentials saved' : 'Kroger credentials cleared');
+  // Re-fetch sale data if items are loaded
+  if (items.length) fetchSaleData(items);
+}
+function updateSettingsBtn() {
+  const { id, sec } = krogerCreds();
+  const btn = $('settingsBtn');
+  if (btn) btn.classList.toggle('configured', !!(id && sec));
+}
 
 let _krogerToken    = null;
 let _krogerTokenExp = 0;
@@ -2078,7 +2222,8 @@ let _krogerLocId    = null;
 
 async function krogerGetToken() {
   if (_krogerToken && Date.now() < _krogerTokenExp) return _krogerToken;
-  const creds = btoa(`${KROGER_CLIENT_ID}:${KROGER_CLIENT_SECRET}`);
+  const { id, sec } = krogerCreds();
+  const creds = btoa(`${id}:${sec}`);
   const res = await fetch('https://api.kroger.com/v1/connect/oauth2/token', {
     method: 'POST',
     headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2104,7 +2249,8 @@ async function krogerGetHTLocation(token) {
 }
 
 async function fetchKrogerHTSaleData(appItems) {
-  if (!KROGER_CLIENT_ID || !KROGER_CLIENT_SECRET) return {};
+  const { id, sec } = krogerCreds();
+  if (!id || !sec) return {};
   try {
     const token      = await krogerGetToken();
     const locationId = await krogerGetHTLocation(token);
@@ -3821,6 +3967,7 @@ function clearAll() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadPrefs();
+  updateSettingsBtn(); // show green gear if Kroger creds are saved
   checkGitHubFiles(); // non-blocking — updates drop zones if GitHub files exist
 
   setupDrop('wfsDrop', 'wfsFile', 'wfsName', rows => {
