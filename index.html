@@ -2014,7 +2014,7 @@ const JSONBIN_KEY = '$2a$10$BcDWdgwfihwP/01f64ZXlOcF6zHcSSdC..Uh80lZ8jyulxqA8zRm
 const GITHUB_RAW = 'https://raw.githubusercontent.com/dudethatsclassic/sourcing-assistant/main/data';
 const GITHUB_INVENTORY_URL = GITHUB_RAW + '/inventoryHealth.csv';
 const GITHUB_ORDERS_URL    = GITHUB_RAW + '/orders.xlsx';
-const GITHUB_HISTORY_URL   = GITHUB_RAW + '/orders_history.xlsx';
+const GITHUB_HISTORY_URL   = GITHUB_RAW + '/orders_history.csv';
 
 async function checkGitHubFiles() {
   const [invOk, ordOk, histOk] = await Promise.all([
@@ -2040,18 +2040,8 @@ async function checkGitHubFiles() {
 async function fetchGitHubHistory() {
   const res = await fetch(GITHUB_HISTORY_URL, { cache: 'no-cache' });
   if (!res.ok) return null;
-  const buf = await res.arrayBuffer();
-  const wb  = XLSX.read(buf, { type: 'array', cellDates: true });
-  const ws  = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  const rows = raw.map(r => {
-    const out = {};
-    Object.keys(r).forEach(k => {
-      const nk = k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-      out[nk] = String(r[k] ?? '').trim();
-    });
-    return out;
-  });
+  const text = await res.text();
+  const { rows } = parseCSV(text);
   return rows.length ? rows : null;
 }
 
