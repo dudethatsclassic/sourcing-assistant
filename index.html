@@ -1581,6 +1581,47 @@
 
     .buy-sheet.open { transform: translateY(0); }
 
+    /* ── Manual Sale Picker Sheet ── */
+    .manual-sale-picker {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-radius: 18px 18px 0 0;
+      padding: 12px 22px 40px;
+      z-index: 201;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      max-width: 600px;
+      margin: 0 auto;
+      box-shadow: 0 -4px 32px rgba(0,0,0,0.12);
+    }
+    .manual-sale-picker.open { transform: translateY(0); }
+    .msp-store-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 11px 14px;
+      margin-bottom: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+      text-align: left;
+    }
+    .msp-store-btn:hover { border-color: var(--orange); }
+    .msp-store-btn.selected {
+      background: var(--orange-dim);
+      border-color: rgba(224,120,0,0.4);
+      color: var(--orange);
+      font-weight: 600;
+    }
+
     .buy-item-name {
       font-size: 14px;
       font-weight: 600;
@@ -1827,7 +1868,7 @@
 </div>
 
 <!-- ── Store Sheet ── -->
-<div class="sheet-overlay" id="sheetOverlay" onclick="closeStoreSheet(); closeBuySheet()"></div>
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeStoreSheet(); closeBuySheet(); closeManualSalePicker()"></div>
 <div class="store-sheet" id="storeSheet">
   <div class="sheet-handle"></div>
   <div class="sheet-item-name" id="sheetItemName"></div>
@@ -1856,6 +1897,18 @@
   <div class="sheet-actions" style="margin-top:10px">
     <button class="btn btn-ghost" onclick="closeBuySheet()" style="flex:1">Cancel</button>
     <button class="btn btn-ghost btn-remove" id="unmarkBtn" onclick="unmarkPurchase()" style="display:none">Unmark</button>
+  </div>
+</div>
+
+<!-- ── Manual Sale Picker Sheet ── -->
+<div class="manual-sale-picker" id="manualSalePicker">
+  <div class="sheet-handle"></div>
+  <div class="buy-item-name" id="mspItemName">Mark on sale at…</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Select which store(s) have this item on sale</div>
+  <div id="mspStores"></div>
+  <div class="sheet-actions" style="margin-top:14px">
+    <button class="btn btn-ghost" onclick="closeManualSalePicker()" style="flex:1">Cancel</button>
+    <button class="btn btn-primary" onclick="confirmManualSalePicker()" style="flex:2;justify-content:center;display:flex">✓ Save</button>
   </div>
 </div>
 
@@ -2036,11 +2089,16 @@ async function loadStoreData() {
       tags[id] = Array.isArray(val) ? val : [val];
     });
 
-    // Purge expired manual sales
+    // Purge expired manual sales + migrate old format (was just a timestamp number)
     const now = Date.now();
     const cleanManualSales = {};
-    Object.entries(rawManualSales).forEach(([id, exp]) => {
-      if (exp > now) cleanManualSales[id] = exp;
+    Object.entries(rawManualSales).forEach(([id, val]) => {
+      if (typeof val === 'number') {
+        // Old format: migrate — no store info known, use empty array (= all stores)
+        if (val > now) cleanManualSales[id] = { stores: [], expiresMs: val };
+      } else if (val?.expiresMs > now) {
+        cleanManualSales[id] = val;
+      }
     });
 
     // Guard: if remote has far fewer tags than local backup, restore from backup
@@ -2998,51 +3056,129 @@ function renderCard(item, delay = 0) {
   return el;
 }
 
+// ─── Manual Sale helpers ──────────────────────────────────────────────────────
+function isManualSaleAt(itemId, store) {
+  const ms = manualSales[itemId];
+  if (!ms) return false;
+  // empty stores array = generic (applies to all stores)
+  return ms.stores.length === 0 || ms.stores.includes(store);
+}
+function getManualSaleStores(itemId) {
+  return manualSales[itemId]?.stores || [];
+}
+
 function saleBadgeHtml(itemId) {
-  const sales    = saleMap[itemId] || [];
-  const isManual = !!manualSales[itemId];
-  if (!sales.length && !isManual) return '';
-  const storeTags  = sales.map(s => `<span class="sale-tag">${escHtml(s.store)}</span>`).join('');
-  const manualTag  = isManual ? `<span class="sale-tag sale-tag-manual">Manual</span>` : '';
-  return `<div class="card-sale">🏷️ On Sale — ${storeTags}${manualTag}</div>`;
+  const sales       = saleMap[itemId] || [];
+  const manualStores = getManualSaleStores(itemId);
+  const hasManual   = !!manualSales[itemId];
+  if (!sales.length && !hasManual) return '';
+  const autoTags   = sales.map(s => `<span class="sale-tag">${escHtml(s.store)}</span>`).join('');
+  const manualTags = hasManual
+    ? (manualStores.length
+        ? manualStores.map(s => `<span class="sale-tag sale-tag-manual">${escHtml(s)}</span>`).join('')
+        : `<span class="sale-tag sale-tag-manual">On Sale</span>`)
+    : '';
+  return `<div class="card-sale">🏷️ On Sale — ${autoTags}${manualTags}</div>`;
 }
 
 function listSaleBadgeHtml(itemId) {
-  const sales    = saleMap[itemId] || [];
-  const isManual = !!manualSales[itemId];
-  if (!sales.length && !isManual) return '';
-  const storeTags = sales.map(s => `<span class="list-sale-tag">${escHtml(s.store)}</span>`).join('');
-  const manualTag = isManual ? `<span class="list-sale-tag list-sale-tag-manual">Manual</span>` : '';
-  return `<div class="list-sale">🏷️ ${storeTags}${manualTag}</div>`;
+  const sales        = saleMap[itemId] || [];
+  const manualStores = getManualSaleStores(itemId);
+  const hasManual    = !!manualSales[itemId];
+  if (!sales.length && !hasManual) return '';
+  const autoTags   = sales.map(s => `<span class="list-sale-tag">${escHtml(s.store)}</span>`).join('');
+  const manualTags = hasManual
+    ? (manualStores.length
+        ? manualStores.map(s => `<span class="list-sale-tag list-sale-tag-manual">${escHtml(s)}</span>`).join('')
+        : `<span class="list-sale-tag list-sale-tag-manual">On Sale</span>`)
+    : '';
+  return `<div class="list-sale">🏷️ ${autoTags}${manualTags}</div>`;
 }
 
 function manualSaleToggle(itemId, compact = false) {
   const isActive = !!manualSales[itemId];
   if (compact) {
-    // In list rows: only show button when active, or as tiny text link
     if (!isActive) return `<span onclick="toggleManualSale('${escHtml(itemId)}')" style="font-size:10px;color:var(--muted-light);cursor:pointer;margin-top:2px;display:inline-block">+ mark on sale</span>`;
-    const daysLeft = Math.ceil((manualSales[itemId] - Date.now()) / 86400000);
-    return `<span onclick="toggleManualSale('${escHtml(itemId)}')" style="font-size:10px;color:var(--orange);cursor:pointer;margin-top:2px;display:inline-block">🏷️ Manual sale · ${daysLeft}d left · ×</span>`;
+    const daysLeft  = Math.ceil((manualSales[itemId].expiresMs - Date.now()) / 86400000);
+    const storeList = getManualSaleStores(itemId);
+    const label     = storeList.length ? storeList.join(', ') : 'On Sale';
+    return `<span onclick="toggleManualSale('${escHtml(itemId)}')" style="font-size:10px;color:var(--orange);cursor:pointer;margin-top:2px;display:inline-block">🏷️ ${escHtml(label)} · ${daysLeft}d · ×</span>`;
   }
-  // Card view: full pill button
   const isActiveClass = isActive ? ' active' : '';
+  const storeList = getManualSaleStores(itemId);
   const label = isActive
-    ? `🏷️ On Sale <span style="opacity:0.6">· tap to remove</span>`
+    ? `🏷️ ${storeList.length ? escHtml(storeList.join(', ')) : 'On Sale'} <span style="opacity:0.6">· tap to remove</span>`
     : `+ Mark on sale`;
   return `<div style="margin-top:2px"><button class="manual-sale-btn${isActiveClass}" onclick="event.stopPropagation();toggleManualSale('${escHtml(itemId)}')">${label}</button></div>`;
 }
 
 async function toggleManualSale(itemId) {
-  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  // If already on — remove
   if (manualSales[itemId]) {
     delete manualSales[itemId];
-  } else {
-    manualSales[itemId] = Date.now() + SEVEN_DAYS;
+    saveLocal();
+    saveStoreData_raw(currentPayload());
+    renderGrid(sortItems(items, $('sortSelect').value));
+    renderFilterChips();
+    return;
   }
+  // Not on — figure out which store(s)
+  const tagged = storeTags[itemId] || [];
+  if (tagged.length <= 1) {
+    // 0 or 1 store: auto-set (empty = generic, single = that store)
+    applyManualSale(itemId, tagged.length === 1 ? [tagged[0]] : []);
+  } else {
+    // Multiple stores: show picker
+    openManualSalePicker(itemId, tagged);
+  }
+}
+
+function applyManualSale(itemId, stores) {
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  manualSales[itemId] = { stores, expiresMs: Date.now() + SEVEN_DAYS };
   saveLocal();
   saveStoreData_raw(currentPayload());
   renderGrid(sortItems(items, $('sortSelect').value));
   renderFilterChips();
+}
+
+// ─── Manual Sale Picker ───────────────────────────────────────────────────────
+let _mspItemId   = null;
+let _mspSelected = new Set();
+
+function openManualSalePicker(itemId, stores) {
+  _mspItemId   = itemId;
+  _mspSelected = new Set();
+  const item = items.find(x => x.itemId === itemId);
+  $('mspItemName').textContent = item?.name || itemId;
+  renderMspStores(stores);
+  $('sheetOverlay').style.display = 'block';
+  $('manualSalePicker').classList.add('open');
+}
+
+function renderMspStores(stores) {
+  $('mspStores').innerHTML = stores.map(s => {
+    const sel = _mspSelected.has(s);
+    return `<button class="msp-store-btn${sel ? ' selected' : ''}" onclick="toggleMspStore('${escHtml(s)}',${JSON.stringify(stores)})">${storeLogoImg(s, 16)} ${escHtml(s)} ${sel ? '<span style="margin-left:auto">✓</span>' : ''}</button>`;
+  }).join('');
+}
+
+function toggleMspStore(store, stores) {
+  if (_mspSelected.has(store)) _mspSelected.delete(store);
+  else _mspSelected.add(store);
+  renderMspStores(stores);
+}
+
+function closeManualSalePicker() {
+  $('sheetOverlay').style.display = 'none';
+  $('manualSalePicker').classList.remove('open');
+}
+
+function confirmManualSalePicker() {
+  closeManualSalePicker();
+  if (_mspSelected.size > 0) {
+    applyManualSale(_mspItemId, [..._mspSelected]);
+  }
 }
 
 function storeTagBtn(itemId) {
@@ -3417,7 +3553,7 @@ function enterShoppingMode(store) {
                                    return (order[a.urgency] ?? 2) - (order[b.urgency] ?? 2);
                                  });
   const onSaleOnly   = storeItems.filter(x =>
-    x.suggestBuy === 0 && (saleMap[x.itemId]?.some(s => s.store === store) || manualSales[x.itemId])
+    x.suggestBuy === 0 && (saleMap[x.itemId]?.some(s => s.store === store) || isManualSaleAt(x.itemId, store))
   );
 
   let html = '';
@@ -3448,7 +3584,7 @@ function shoppingItemHtml(item, store) {
   const urgencyStyle  = urgencyColors[item.urgency] || '';
   const urgencyHtml   = urgencyLabel[item.urgency]
     ? `<span class="shopping-urgency" style="${urgencyStyle}">${urgencyLabel[item.urgency]}</span>` : '';
-  const saleHtml = (saleMap[item.itemId]?.some(s => s.store === store) || manualSales[item.itemId])
+  const saleHtml = (saleMap[item.itemId]?.some(s => s.store === store) || isManualSaleAt(item.itemId, store))
     ? `<span style="font-size:11px;color:var(--green);font-weight:600">🏷️ On Sale</span>` : '';
   const isNew = item.isNew ? `<span style="font-size:11px;color:#55c;font-weight:600">🆕 New</span>` : '';
 
@@ -3539,7 +3675,7 @@ function copyShoppingList() {
   const needToBuy  = storeItems.filter(x => x.suggestBuy > 0)
                                .sort((a, b) => ({ critical:0, low:1, ok:2 }[a.urgency]??2) - ({ critical:0, low:1, ok:2 }[b.urgency]??2));
   const onSaleOnly = storeItems.filter(x =>
-    x.suggestBuy === 0 && (saleMap[x.itemId]?.some(s => s.store === store) || manualSales[x.itemId])
+    x.suggestBuy === 0 && (saleMap[x.itemId]?.some(s => s.store === store) || isManualSaleAt(x.itemId, store))
   );
 
   if (needToBuy.length) {
@@ -3547,7 +3683,7 @@ function copyShoppingList() {
     needToBuy.forEach(item => {
       const check = purchases[item.itemId] ? '[x]' : '[ ]';
       const qty   = shoppingQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy);
-      const sale  = (saleMap[item.itemId]?.some(s => s.store === store) || manualSales[item.itemId]) ? ' (sale)' : '';
+      const sale  = (saleMap[item.itemId]?.some(s => s.store === store) || isManualSaleAt(item.itemId, store)) ? ' (sale)' : '';
       lines.push(`${check} ${item.name} x${qty}${sale}`);
     });
   }
