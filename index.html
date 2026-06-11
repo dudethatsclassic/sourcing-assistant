@@ -1789,6 +1789,16 @@
     </div>
 
     <div class="field" style="margin-top:14px">
+      <label>Extended History <span style="font-weight:400;color:var(--muted-light)">(optional — 6–12 months of orders for more accurate velocity on slow sellers)</span></label>
+      <div class="drop-zone" id="histDrop">
+        <input type="file" accept=".csv,.xlsx" id="histFile">
+        <div class="drop-icon">📅</div>
+        <div class="drop-label">Drop CSV or Excel file (same format as Sales Data)</div>
+        <div class="drop-name" id="histName"></div>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:14px">
       <label>Inbound Shipment CSVs <span style="font-weight:400;color:var(--muted-light)">(optional — select multiple files at once for all open shipments)</span></label>
       <div class="drop-zone" id="shipDrop" style="min-height:72px">
         <input type="file" accept=".csv" id="shipFile" multiple>
@@ -2004,11 +2014,13 @@ const JSONBIN_KEY = '$2a$10$BcDWdgwfihwP/01f64ZXlOcF6zHcSSdC..Uh80lZ8jyulxqA8zRm
 const GITHUB_RAW = 'https://raw.githubusercontent.com/dudethatsclassic/sourcing-assistant/main/data';
 const GITHUB_INVENTORY_URL = GITHUB_RAW + '/inventoryHealth.csv';
 const GITHUB_ORDERS_URL    = GITHUB_RAW + '/orders.xlsx';
+const GITHUB_HISTORY_URL   = GITHUB_RAW + '/orders_history.xlsx';
 
 async function checkGitHubFiles() {
-  const [invOk, ordOk] = await Promise.all([
+  const [invOk, ordOk, histOk] = await Promise.all([
     fetch(GITHUB_INVENTORY_URL, { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
     fetch(GITHUB_ORDERS_URL,    { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
+    fetch(GITHUB_HISTORY_URL,   { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
   ]);
   if (invOk && !wfsRows) {
     $('wfsName').textContent = '☁ Auto-loads from GitHub';
@@ -2018,7 +2030,29 @@ async function checkGitHubFiles() {
     $('sbName').textContent = '☁ Auto-loads from GitHub';
     $('sbDrop').classList.add('github-ready');
   }
-  return { invOk, ordOk };
+  if (histOk && !histRows) {
+    $('histName').textContent = '☁ Auto-loads from GitHub';
+    $('histDrop').classList.add('github-ready');
+  }
+  return { invOk, ordOk, histOk };
+}
+
+async function fetchGitHubHistory() {
+  const res = await fetch(GITHUB_HISTORY_URL, { cache: 'no-cache' });
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  const wb  = XLSX.read(buf, { type: 'array', cellDates: true });
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const rows = raw.map(r => {
+    const out = {};
+    Object.keys(r).forEach(k => {
+      const nk = k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      out[nk] = String(r[k] ?? '').trim();
+    });
+    return out;
+  });
+  return rows.length ? rows : null;
 }
 
 async function fetchGitHubInventory() {
@@ -2370,6 +2404,7 @@ async function fetchSaleData(appItems) {
 // ─── State ───────────────────────────────────────────────────────────────────
 let wfsRows  = null;   // raw parsed CSV rows
 let sbRows   = null;
+let histRows = null;   // extended history rows (optional — longer date range for velocity)
 let shipNameMap = new Map(); // combined name→qty across all uploaded shipment CSVs
 let items   = [];     // computed items
 let wfsColMap = {};   // manual column overrides
@@ -2846,7 +2881,7 @@ function applyShipmentInbound(items, shipNameMap, wfsNameToId = new Map()) {
 }
 
 // ─── Merge & Compute ──────────────────────────────────────────────────────────
-function mergeData(sheetMap, invMap, velMap, weeksTarget) {
+function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
   // If we have sales data, only show items that sold — otherwise fall back to union
   const allIds = velMap.size
     ? new Set(velMap.keys())
@@ -2854,14 +2889,26 @@ function mergeData(sheetMap, invMap, velMap, weeksTarget) {
 
   const out = [];
   allIds.forEach(id => {
-    const sheet = sheetMap.get(id) || { itemId: id, name: '', prices: [], image: null };
-    const inv   = invMap.get(id)   || { itemId: id, currentStock: 0, inbound: 0 };
-    const vel   = velMap.get(id)   || { itemId: id, weeklySold: 0 };
+    const sheet    = sheetMap.get(id) || { itemId: id, name: '', prices: [], image: null };
+    const inv      = invMap.get(id)   || { itemId: id, currentStock: 0, inbound: 0 };
+    const shortVel = velMap.get(id)   || { itemId: id, weeklySold: 0, isNew: false };
+    const longVel  = longVelMap?.get(id);
+
+    // Use long-term velocity for established items — more data = less noise.
+    // If the item isn't flagged as "new" in the historical data, it's established
+    // and the long-term average is more reliable than the 90-day window.
+    let weekly, isNew;
+    if (longVel && !longVel.isNew) {
+      weekly = longVel.weeklySold;
+      isNew  = false;
+    } else {
+      weekly = shortVel.weeklySold;
+      isNew  = shortVel.isNew || false;
+    }
 
     const prices    = sheet.prices;
     const minPrice  = prices.length ? Math.min(...prices) : null;
     const maxPrice  = prices.length ? Math.max(...prices) : null;
-    const weekly    = vel.weeklySold;
     const parLevel  = Math.ceil(weekly * weeksTarget);
     const onOrder   = inv.currentStock + inv.inbound;
     const suggestBuy = Math.max(0, parLevel - onOrder);
@@ -2873,7 +2920,7 @@ function mergeData(sheetMap, invMap, velMap, weeksTarget) {
 
     out.push({
       itemId: id,
-      name: cleanName(sheet.name || vel.name) || ('Item ' + id),
+      name: cleanName(sheet.name || shortVel.name || longVel?.name) || ('Item ' + id),
       currentStock: inv.currentStock,
       inbound:      inv.inbound,
       weekly,
@@ -2882,8 +2929,8 @@ function mergeData(sheetMap, invMap, velMap, weeksTarget) {
       minPrice,
       maxPrice,
       urgency,
-      isNew: vel.isNew || false,
-      image: sheet.image || null,   // prefilled from sheet; replaced by Walmart fetch if null
+      isNew,
+      image: sheet.image || null,
     });
   });
 
@@ -3966,12 +4013,28 @@ async function generate(colMap = {}) {
       velMap = parseSalesRows(sbSource);
     }
 
+    // 4. Extended history — optional, improves velocity accuracy for slow/established items
+    let longVelMap = null;
+    let histSource = histRows;
+    if (!histSource) {
+      const fetched = await fetchGitHubHistory().catch(() => null);
+      if (fetched) {
+        histSource = fetched;
+        $('histName').textContent = '✓ Loaded from GitHub';
+        $('histDrop').classList.remove('github-ready');
+        $('histDrop').classList.add('loaded');
+      }
+    }
+    if (histSource) {
+      longVelMap = parseSalesRows(histSource);
+    }
+
     if (!sheetMap.size && !invMap.size && !velMap.size) {
       throw new Error('No data found. Check column names and file formats.');
     }
 
     setSpinner(true, 'Computing par levels…');
-    items = mergeData(sheetMap, invMap, velMap, weeksTarget);
+    items = mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget);
 
     setSpinner(true, 'Loading store data…');
     const storeData = await loadStoreData();
@@ -4084,14 +4147,15 @@ function reSort() {
 
 // ─── Clear ────────────────────────────────────────────────────────────────────
 function clearAll() {
-  wfsRows = null;
-  sbRows  = null;
-  items   = [];
+  wfsRows  = null;
+  sbRows   = null;
+  histRows = null;
+  items    = [];
   wfsColMap = {};
 
-  ['wfsFile', 'sbFile', 'shipFile'].forEach(id => { $(id).value = ''; });
-  ['wfsName', 'sbName', 'shipName'].forEach(id => { $(id).textContent = ''; });
-  ['wfsDrop', 'sbDrop', 'shipDrop'].forEach(id => { $(id).classList.remove('loaded'); });
+  ['wfsFile', 'sbFile', 'histFile', 'shipFile'].forEach(id => { $(id).value = ''; });
+  ['wfsName', 'sbName', 'histName', 'shipName'].forEach(id => { $(id).textContent = ''; });
+  ['wfsDrop', 'sbDrop', 'histDrop', 'shipDrop'].forEach(id => { $(id).classList.remove('loaded'); });
   shipNameMap = new Map();
   saleMap = {};
 
@@ -4116,6 +4180,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDrop('sbDrop', 'sbFile', 'sbName', rows => {
     sbRows = rows;
     $('sbDrop').classList.remove('github-ready');
+  });
+  setupDrop('histDrop', 'histFile', 'histName', rows => {
+    histRows = rows;
+    $('histDrop').classList.remove('github-ready');
   });
   // Shipment CSV handler — supports multiple files, accumulates into shipNameMap
   const shipDropEl = $('shipDrop');
