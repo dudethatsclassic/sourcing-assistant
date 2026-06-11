@@ -2353,16 +2353,26 @@ async function fetchKrogerHTSaleData(appItems) {
 
     const result = {};
     let errorCount = 0;
+    let samplePrice = null;
     for (const item of htItems) {
       try {
         const term = encodeURIComponent(item.name.slice(0, 50).trim());
         const res  = await fetch(
-          `https://api.kroger.com/v1/products?filter.term=${term}&filter.locationId=${locationId}&filter.limit=5&filter.fulfillment=ais`,
+          `https://api.kroger.com/v1/products?filter.term=${term}&filter.locationId=${locationId}&filter.limit=5`,
           { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
         );
         if (!res.ok) { errorCount++; await new Promise(r => setTimeout(r, 300)); continue; }
         const d = await res.json();
-        const onSale = (d.data || []).some(p => (p.items || []).some(pi => pi.price?.promo != null));
+        // Capture first price object seen for diagnostics
+        if (!samplePrice && d.data?.[0]?.items?.[0]?.price !== undefined) {
+          samplePrice = JSON.stringify(d.data[0].items[0].price);
+        }
+        // Sale: promo exists, is positive, and differs from regular price
+        const onSale = (d.data || []).some(p => (p.items || []).some(pi => {
+          const promo   = pi.price?.promo;
+          const regular = pi.price?.regular;
+          return promo && promo > 0 && promo !== regular;
+        }));
         if (onSale) {
           result[item.itemId] = [{ store: 'Harris Teeter', saleName: (d.data[0]?.description || item.name), score: 1, source: 'kroger' }];
         }
@@ -2370,7 +2380,10 @@ async function fetchKrogerHTSaleData(appItems) {
       } catch (e) { errorCount++; }
     }
     if (errorCount === htItems.length) {
-      toast('Harris Teeter API: all product searches failed — check credentials', true);
+      toast('Harris Teeter API: all product searches failed', true);
+    } else {
+      const found = Object.keys(result).length;
+      toast(`HT check: ${htItems.length} searched, ${found} on sale — price sample: ${samplePrice || 'no results'}`);
     }
     return result;
   } catch (e) {
