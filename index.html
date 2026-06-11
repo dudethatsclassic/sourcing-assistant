@@ -988,6 +988,213 @@
       background: rgba(255,255,255,0.3);
     }
 
+    /* ── Shopping Mode ── */
+    .shopping-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 400;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateY(100%);
+      transition: transform 0.28s cubic-bezier(0.32,0,0.15,1);
+    }
+    .shopping-overlay.open { transform: translateY(0); }
+
+    .shopping-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .shopping-store-info { flex: 1; min-width: 0; }
+
+    .shopping-store-name {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .shopping-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .shopping-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .shopping-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 13px;
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .shopping-copy-btn:hover { border-color: var(--accent-mid); color: var(--accent); }
+
+    .shopping-done-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 16px;
+      border-radius: var(--r-sm);
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .shopping-done-btn:hover { background: var(--accent-mid); }
+
+    .shopping-body {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 0 40px;
+    }
+
+    .shopping-section-header {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted-light);
+      padding: 20px 20px 8px;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 1;
+    }
+
+    .shopping-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border-light);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .shopping-item:active { background: var(--surface2); }
+
+    .shopping-check {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.15s;
+      margin-top: 1px;
+      background: var(--surface);
+    }
+
+    .shopping-item.is-checked .shopping-check {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+
+    .shopping-item-info { flex: 1; min-width: 0; }
+
+    .shopping-item-name {
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.4;
+      transition: opacity 0.15s;
+    }
+
+    .shopping-item.is-checked .shopping-item-name {
+      text-decoration: line-through;
+      opacity: 0.4;
+    }
+
+    .shopping-item-sub {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 3px;
+      flex-wrap: wrap;
+    }
+
+    .shopping-urgency {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .shopping-qty {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--accent);
+      flex-shrink: 0;
+      min-width: 36px;
+      text-align: right;
+      margin-top: 1px;
+    }
+
+    .shopping-qty-label {
+      font-size: 10px;
+      color: var(--muted);
+      display: block;
+      text-align: right;
+      margin-top: 1px;
+    }
+
+    .shopping-empty {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .go-shopping-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 14px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-family: inherit;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .go-shopping-btn:hover { background: var(--accent-mid); }
+
     /* ── Bottom Sheet ── */
     .sheet-overlay {
       position: fixed;
@@ -1434,6 +1641,21 @@
     <p>Connect your Google Sheet, upload the WFS inventory and sales data, then tap Generate.</p>
   </div>
 </main>
+
+<!-- ── Shopping Mode Overlay ── -->
+<div class="shopping-overlay" id="shoppingOverlay">
+  <div class="shopping-header">
+    <div class="shopping-store-info">
+      <div class="shopping-store-name" id="shoppingStoreName"></div>
+      <div class="shopping-meta" id="shoppingMeta"></div>
+    </div>
+    <div class="shopping-header-actions">
+      <button class="shopping-copy-btn" onclick="copyShoppingList()">📋 Copy List</button>
+      <button class="shopping-done-btn" onclick="exitShoppingMode()">Done</button>
+    </div>
+  </div>
+  <div class="shopping-body" id="shoppingBody"></div>
+</div>
 
 <!-- ── Store Sheet ── -->
 <div class="sheet-overlay" id="sheetOverlay" onclick="closeStoreSheet(); closeBuySheet()"></div>
@@ -2782,6 +3004,12 @@ function renderFilterChips() {
     `<button class="filter-chip${activeFilter === s ? ' active' : ''}"
        onclick="setFilter('${escHtml(s)}')">${storeLogoImg(s, 14) + ' '}${escHtml(s)}</button>`
   ).join('');
+
+  // Go Shopping button — only when a real store is selected
+  if (activeFilter && activeFilter !== '__sale__') {
+    html += `<button class="go-shopping-btn" onclick="enterShoppingMode('${escHtml(activeFilter)}')">🛒 Go Shopping</button>`;
+  }
+
   bar.innerHTML = html;
 }
 
@@ -2799,6 +3027,144 @@ function setFilter(store) {
     summaryItems = items;
   }
   renderSummary(summaryItems);
+}
+
+// ─── Shopping Mode ────────────────────────────────────────────────────────────
+function enterShoppingMode(store) {
+  const overlay = $('shoppingOverlay');
+
+  // Header
+  $('shoppingStoreName').innerHTML = storeLogoImg(store, 20) + ' ' + escHtml(store);
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  $('shoppingMeta').textContent = today;
+
+  // Build item lists
+  const storeItems = items.filter(x =>
+    (storeTags[x.itemId] || []).includes(store) && !archivedIds.has(x.itemId)
+  );
+
+  const needToBuy    = storeItems.filter(x => x.suggestBuy > 0)
+                                 .sort((a, b) => {
+                                   const order = { critical: 0, low: 1, ok: 2 };
+                                   return (order[a.urgency] ?? 2) - (order[b.urgency] ?? 2);
+                                 });
+  const onSaleOnly   = storeItems.filter(x =>
+    x.suggestBuy === 0 && saleMap[x.itemId]?.some(s => s.store === store)
+  );
+
+  let html = '';
+
+  if (!needToBuy.length && !onSaleOnly.length) {
+    html = `<div class="shopping-empty">No items tagged to ${escHtml(store)} need restocking right now.</div>`;
+  } else {
+    if (needToBuy.length) {
+      html += `<div class="shopping-section-header">Need to Buy · ${needToBuy.length} item${needToBuy.length !== 1 ? 's' : ''}</div>`;
+      html += needToBuy.map(item => shoppingItemHtml(item, store)).join('');
+    }
+    if (onSaleOnly.length) {
+      html += `<div class="shopping-section-header">🏷️ On Sale — Already Stocked</div>`;
+      html += onSaleOnly.map(item => shoppingItemHtml(item, store)).join('');
+    }
+  }
+
+  $('shoppingBody').innerHTML = html;
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function shoppingItemHtml(item, store) {
+  const isBought = !!purchases[item.itemId];
+  const urgencyColors = { critical: 'color:var(--red);background:var(--red-dim)', low: 'color:var(--orange);background:var(--orange-dim)', ok: '' };
+  const urgencyLabel  = { critical: 'Out of Stock', low: 'Running Low', ok: '' };
+  const urgencyStyle  = urgencyColors[item.urgency] || '';
+  const urgencyHtml   = urgencyLabel[item.urgency]
+    ? `<span class="shopping-urgency" style="${urgencyStyle}">${urgencyLabel[item.urgency]}</span>` : '';
+  const saleHtml = saleMap[item.itemId]?.some(s => s.store === store)
+    ? `<span style="font-size:11px;color:var(--green);font-weight:600">🏷️ On Sale</span>` : '';
+  const isNew = item.isNew ? `<span style="font-size:11px;color:#55c;font-weight:600">🆕 New</span>` : '';
+
+  return `
+    <div class="shopping-item${isBought ? ' is-checked' : ''}" data-id="${escHtml(item.itemId)}" onclick="toggleShoppingItem('${escHtml(item.itemId)}', '${escHtml(store)}')">
+      <div class="shopping-check">${isBought ? '✓' : ''}</div>
+      <div class="shopping-item-info">
+        <div class="shopping-item-name">${escHtml(item.name)}</div>
+        <div class="shopping-item-sub">${urgencyHtml}${saleHtml}${isNew}</div>
+      </div>
+      ${item.suggestBuy > 0 ? `
+        <div style="text-align:right;flex-shrink:0">
+          <div class="shopping-qty">×${item.suggestBuy}</div>
+          <div class="shopping-qty-label">to buy</div>
+        </div>` : ''}
+    </div>`;
+}
+
+function toggleShoppingItem(itemId, store) {
+  if (purchases[itemId]) {
+    delete purchases[itemId];
+  } else {
+    const item = items.find(x => x.itemId === itemId);
+    purchases[itemId] = { qty: item ? item.suggestBuy || 1 : 1, ts: Date.now() };
+  }
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+
+  // Update the row in shopping view
+  const row = $('shoppingBody').querySelector(`[data-id="${CSS.escape(itemId)}"]`);
+  if (row) {
+    const isBought = !!purchases[itemId];
+    row.classList.toggle('is-checked', isBought);
+    const check = row.querySelector('.shopping-check');
+    if (check) check.textContent = isBought ? '✓' : '';
+  }
+
+  // Keep card grid in sync
+  refreshPurchaseUI(itemId);
+  renderClearBoughtBtn();
+  renderSummary(activeFilter && activeFilter !== '__sale__'
+    ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
+    : items);
+}
+
+function exitShoppingMode() {
+  $('shoppingOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  // Re-render grid to reflect any bought changes
+  renderGrid(sortItems(items, $('sortSelect').value));
+}
+
+function copyShoppingList() {
+  const store    = activeFilter && activeFilter !== '__sale__' ? activeFilter : 'Store';
+  const today    = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const lines    = [`${store} — ${today}`, ''];
+
+  const storeItems = items.filter(x =>
+    (storeTags[x.itemId] || []).includes(store) && !archivedIds.has(x.itemId)
+  );
+  const needToBuy  = storeItems.filter(x => x.suggestBuy > 0)
+                               .sort((a, b) => ({ critical:0, low:1, ok:2 }[a.urgency]??2) - ({ critical:0, low:1, ok:2 }[b.urgency]??2));
+  const onSaleOnly = storeItems.filter(x =>
+    x.suggestBuy === 0 && saleMap[x.itemId]?.some(s => s.store === store)
+  );
+
+  if (needToBuy.length) {
+    lines.push('NEED TO BUY');
+    needToBuy.forEach(item => {
+      const check = purchases[item.itemId] ? '✓' : '☐';
+      const sale  = saleMap[item.itemId]?.some(s => s.store === store) ? ' 🏷️' : '';
+      lines.push(`${check} ${item.name} × ${item.suggestBuy}${sale}`);
+    });
+  }
+  if (onSaleOnly.length) {
+    if (needToBuy.length) lines.push('');
+    lines.push('ON SALE — ALREADY STOCKED');
+    onSaleOnly.forEach(item => {
+      lines.push(`☐ ${item.name} 🏷️`);
+    });
+  }
+
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => toast('List copied to clipboard!'))
+    .catch(() => toast('Copy failed — try again', true));
 }
 
 // ─── Store Sheet ──────────────────────────────────────────────────────────────
