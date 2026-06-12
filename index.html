@@ -2339,9 +2339,9 @@ async function fetchKrogerHTSaleData(appItems) {
   if (!id || !sec) return {};
   try {
     const token = await krogerGetToken();
-    console.log('[Kroger] token OK');
+
     const locationId = await krogerGetHTLocation(token);
-    console.log('[Kroger] locationId:', locationId);
+
     if (!locationId) {
       toast('Harris Teeter: no store found near ' + KROGER_HT_ZIP, true);
       return {};
@@ -2352,7 +2352,6 @@ async function fetchKrogerHTSaleData(appItems) {
       (storeTags[x.itemId] || []).some(s => s.toLowerCase().includes('harris teeter'))
     );
     const htItems = allHtItems.sort((a, b) => (b.weeklySold || 0) - (a.weeklySold || 0)).slice(0, 40);
-    console.log('[Kroger] HT items to search:', htItems.length, '(of', allHtItems.length, 'tagged)');
 
     if (!htItems.length) {
       toast('Harris Teeter: no items tagged to HT found', true);
@@ -2367,12 +2366,12 @@ async function fetchKrogerHTSaleData(appItems) {
       const batch = htItems.slice(i, i + BATCH);
       await Promise.all(batch.map(async item => {
         try {
-          const term = encodeURIComponent(item.name.slice(0, 50).trim());
+          const term = encodeURIComponent(item.name.slice(0, 50).replace(/[–—]/g, '-').replace(/[^\w\s\-&]/g, ' ').trim());
           const res  = await fetch(
             `${KROGER_PROXY}/v1/products?filter.term=${term}&filter.locationId=${locationId}&filter.limit=5`,
             { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
           );
-          if (!res.ok) { errorCount++; console.warn('[Kroger] search failed', res.status, item.name); return; }
+          if (!res.ok) { errorCount++; return; }
           const d = await res.json();
           // Sale: promo exists, is positive, and differs from regular price
           const onSale = (d.data || []).some(p => (p.items || []).some(pi => {
@@ -2380,16 +2379,13 @@ async function fetchKrogerHTSaleData(appItems) {
             const regular = pi.price?.regular;
             return promo && promo > 0 && promo !== regular;
           }));
-          console.log('[Kroger]', item.name, '→', onSale ? 'ON SALE' : 'not on sale',
-            d.data?.[0] ? `(top result: ${d.data[0].description}, promo: ${d.data[0].items?.[0]?.price?.promo})` : '(no results)');
           if (onSale) {
             result[item.itemId] = [{ store: 'Harris Teeter', saleName: (d.data[0]?.description || item.name), score: 1, source: 'kroger' }];
           }
-        } catch (e) { errorCount++; console.warn('[Kroger] error:', item.name, e.message); }
+        } catch (e) { errorCount++; }
       }));
-      if (i + BATCH < htItems.length) await new Promise(r => setTimeout(r, 400)); // brief pause between batches
+      if (i + BATCH < htItems.length) await new Promise(r => setTimeout(r, 400));
     }
-    console.log('[Kroger] errors:', errorCount, '/ found on sale:', Object.keys(result).length, JSON.stringify(result));
     if (errorCount === htItems.length) {
       toast('Harris Teeter API: all product searches failed', true);
     } else {
