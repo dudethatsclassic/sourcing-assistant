@@ -2182,7 +2182,7 @@ async function saveShipmentToCloud() {
 
 // ─── Flipp Sale Data ─────────────────────────────────────────────────────────
 const FLIPP_POSTAL        = '27410'; // Greensboro, NC
-const FLIPP_TARGET_STORES = ['lowes foods', 'food lion', 'publix', 'harris teeter'];
+const FLIPP_TARGET_STORES = ['lowes foods', 'food lion', 'publix']; // HT handled by Kroger API
 const FLIPP_STOP          = new Set(['or','and','the','with','of','in','a','an','for','to','from','by','at','on','is','it','size','new']);
 const FLIPP_FLYERS_URL    = 'https://backflipp.wishabi.com/flipp/flyers?locale=en-US&postal_code=';
 const FLIPP_FLYER_URL     = 'https://backflipp.wishabi.com/flipp/flyers/';
@@ -2329,39 +2329,12 @@ async function krogerGetToken() {
 
 async function krogerGetHTLocation(token) {
   if (_krogerLocId) return _krogerLocId;
-  // Try HarrisTeeter chain filter directly
-  const htRes = await fetch(
-    `${KROGER_PROXY}/v1/locations?filter.chain=HARRISTEETER&filter.zipCode=${KROGER_HT_ZIP}&filter.radiusInMiles=30&filter.limit=10`,
-    { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
-  );
-  if (htRes.ok) {
-    const htData = await htRes.json();
-    console.log('[Kroger] HarrisTeeter chain search:', JSON.stringify((htData.data||[]).map(s => ({ id: s.locationId, name: s.name, chain: s.chain }))));
-    if (htData.data?.length) {
-      _krogerLocId = htData.data[0].locationId;
-      console.log('[Kroger] found HT store:', htData.data[0].name, _krogerLocId);
-      return _krogerLocId;
-    }
-  }
-  // Fallback: search all chains with wide radius
-  const res = await fetch(
-    `${KROGER_PROXY}/v1/locations?filter.zipCode=${KROGER_HT_ZIP}&filter.radiusInMiles=30&filter.limit=50`,
-    { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
-  );
-  if (!res.ok) throw new Error(`Kroger locations ${res.status}`);
-  const d = await res.json();
-  console.log('[Kroger] all stores near', KROGER_HT_ZIP, ':', JSON.stringify((d.data||[]).map(s => ({ id: s.locationId, name: s.name, chain: s.chain }))));
-  const ht = (d.data||[]).find(s =>
-    s.chain?.toLowerCase().replace(/\s/g,'') === 'harristeeter' ||
-    s.name?.toLowerCase().includes('harris teeter')
-  );
-  _krogerLocId = ht?.locationId || null;
-  console.log('[Kroger] using locationId:', _krogerLocId, ht ? `(${ht.name})` : '(no HT found)');
+  _krogerLocId = '09700033'; // Harris Teeter, Greensboro NC (27410)
   return _krogerLocId;
 }
 
 async function fetchKrogerHTSaleData(appItems) {
-  return {}; // Kroger location API doesn't include HT stores — using Flipp instead
+  if (!KROGER_PROXY || KROGER_PROXY.includes('YOURNAME')) return {};
   const { id, sec } = krogerCreds();
   if (!id || !sec) return {};
   try {
