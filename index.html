@@ -2181,7 +2181,7 @@ async function saveShipmentToCloud() {
 }
 
 // ─── Flipp Sale Data ─────────────────────────────────────────────────────────
-const FLIPP_POSTAL        = '27401'; // Greensboro, NC
+const FLIPP_POSTAL        = '27410'; // Greensboro, NC
 const FLIPP_TARGET_STORES = ['lowes foods', 'food lion', 'publix', 'harris teeter'];
 const FLIPP_STOP          = new Set(['or','and','the','with','of','in','a','an','for','to','from','by','at','on','is','it','size','new']);
 const FLIPP_FLYERS_URL    = 'https://backflipp.wishabi.com/flipp/flyers?locale=en-US&postal_code=';
@@ -2238,7 +2238,7 @@ async function fetchFlippSaleData(appItems) {
       const byStore = {};
       for (const saleItem of allSaleItems) {
         const s = flippMatchScore(appItem.name, saleItem.saleWords);
-        if (s >= 0.65) {
+        if (s >= 0.75) {
           const existing = byStore[saleItem.store];
           if (!existing || s > existing.score) {
             byStore[saleItem.store] = { store: saleItem.store, saleName: saleItem.name, score: s, source: 'flipp' };
