@@ -2198,8 +2198,14 @@ function flippNormalize(s) {
 
 function flippMatchScore(appName, saleWords) {
   if (!saleWords.length) return 0;
-  const appWords = new Set(flippNormalize(appName));
-  return saleWords.filter(w => appWords.has(w)).length / saleWords.length;
+  const appWords = flippNormalize(appName);
+  const appSet  = new Set(appWords);
+  const saleSet = new Set(saleWords);
+  const matched = saleWords.filter(w => appSet.has(w)).length;
+  // Both directions must score well — prevents short sale names matching unrelated longer app names
+  const scoreFwd = matched / saleWords.length;          // how much of sale name matched
+  const scoreRev = matched / Math.max(appWords.length, 1); // how much of app name matched
+  return Math.min(scoreFwd, scoreRev);
 }
 
 async function fetchFlippSaleData(appItems) {
@@ -2238,7 +2244,7 @@ async function fetchFlippSaleData(appItems) {
       const byStore = {};
       for (const saleItem of allSaleItems) {
         const s = flippMatchScore(appItem.name, saleItem.saleWords);
-        if (s >= 0.75) {
+        if (s >= 0.60) {
           const existing = byStore[saleItem.store];
           if (!existing || s > existing.score) {
             byStore[saleItem.store] = { store: saleItem.store, saleName: saleItem.name, score: s, source: 'flipp' };
