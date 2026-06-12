@@ -2324,12 +2324,19 @@ async function krogerGetToken() {
 async function krogerGetHTLocation(token) {
   if (_krogerLocId) return _krogerLocId;
   const res = await fetch(
-    `${KROGER_PROXY}/v1/locations?filter.chain=HarrisTeeter&filter.zipCode=${KROGER_HT_ZIP}&filter.limit=5`,
+    `${KROGER_PROXY}/v1/locations?filter.zipCode=${KROGER_HT_ZIP}&filter.limit=10`,
     { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
   );
   if (!res.ok) throw new Error(`Kroger locations ${res.status}`);
   const d = await res.json();
-  _krogerLocId = d.data?.[0]?.locationId || null;
+  console.log('[Kroger] stores near', KROGER_HT_ZIP, ':', JSON.stringify((d.data||[]).map(s => ({ id: s.locationId, name: s.name, chain: s.chain }))));
+  // Find Harris Teeter by chain name (try both formats)
+  const ht = (d.data||[]).find(s =>
+    s.chain?.toLowerCase().replace(/\s/g,'') === 'harristeeter' ||
+    s.name?.toLowerCase().includes('harris teeter')
+  );
+  _krogerLocId = ht?.locationId || d.data?.[0]?.locationId || null;
+  console.log('[Kroger] using locationId:', _krogerLocId, ht ? `(${ht.name})` : '(first result fallback)');
   return _krogerLocId;
 }
 
