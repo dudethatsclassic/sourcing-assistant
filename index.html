@@ -2391,6 +2391,7 @@ async function fetchKrogerHTSaleData(appItems) {
         await new Promise(r => setTimeout(r, 220));
       } catch (e) { errorCount++; console.warn('[Kroger] product search error:', e.message); }
     }
+    console.log('[Kroger] errors:', errorCount, '/ found on sale:', Object.keys(result).length, JSON.stringify(result));
     if (errorCount === htItems.length) {
       toast('Harris Teeter API: all product searches failed', true);
     } else {
