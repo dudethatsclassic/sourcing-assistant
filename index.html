@@ -2323,20 +2323,34 @@ async function krogerGetToken() {
 
 async function krogerGetHTLocation(token) {
   if (_krogerLocId) return _krogerLocId;
+  // Try HarrisTeeter chain filter directly
+  const htRes = await fetch(
+    `${KROGER_PROXY}/v1/locations?filter.chain=HARRISTEETER&filter.zipCode=${KROGER_HT_ZIP}&filter.radiusInMiles=30&filter.limit=10`,
+    { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+  );
+  if (htRes.ok) {
+    const htData = await htRes.json();
+    console.log('[Kroger] HarrisTeeter chain search:', JSON.stringify((htData.data||[]).map(s => ({ id: s.locationId, name: s.name, chain: s.chain }))));
+    if (htData.data?.length) {
+      _krogerLocId = htData.data[0].locationId;
+      console.log('[Kroger] found HT store:', htData.data[0].name, _krogerLocId);
+      return _krogerLocId;
+    }
+  }
+  // Fallback: search all chains with wide radius
   const res = await fetch(
-    `${KROGER_PROXY}/v1/locations?filter.zipCode=${KROGER_HT_ZIP}&filter.limit=10`,
+    `${KROGER_PROXY}/v1/locations?filter.zipCode=${KROGER_HT_ZIP}&filter.radiusInMiles=30&filter.limit=50`,
     { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
   );
   if (!res.ok) throw new Error(`Kroger locations ${res.status}`);
   const d = await res.json();
-  console.log('[Kroger] stores near', KROGER_HT_ZIP, ':', JSON.stringify((d.data||[]).map(s => ({ id: s.locationId, name: s.name, chain: s.chain }))));
-  // Find Harris Teeter by chain name (try both formats)
+  console.log('[Kroger] all stores near', KROGER_HT_ZIP, ':', JSON.stringify((d.data||[]).map(s => ({ id: s.locationId, name: s.name, chain: s.chain }))));
   const ht = (d.data||[]).find(s =>
     s.chain?.toLowerCase().replace(/\s/g,'') === 'harristeeter' ||
     s.name?.toLowerCase().includes('harris teeter')
   );
-  _krogerLocId = ht?.locationId || d.data?.[0]?.locationId || null;
-  console.log('[Kroger] using locationId:', _krogerLocId, ht ? `(${ht.name})` : '(first result fallback)');
+  _krogerLocId = ht?.locationId || null;
+  console.log('[Kroger] using locationId:', _krogerLocId, ht ? `(${ht.name})` : '(no HT found)');
   return _krogerLocId;
 }
 
