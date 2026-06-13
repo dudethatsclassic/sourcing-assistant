@@ -2373,14 +2373,22 @@ async function fetchKrogerHTSaleData(appItems) {
           );
           if (!res.ok) { errorCount++; return; }
           const d = await res.json();
-          // Sale: promo exists, is positive, and differs from regular price
-          const onSale = (d.data || []).some(p => (p.items || []).some(pi => {
-            const promo   = pi.price?.promo;
-            const regular = pi.price?.regular;
-            return promo && promo > 0 && promo !== regular;
-          }));
-          if (onSale) {
-            result[item.itemId] = [{ store: 'Harris Teeter', saleName: (d.data[0]?.description || item.name), score: 1, source: 'kroger' }];
+          // Build word set from app item name for matching
+          const appWords = new Set(
+            item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2)
+          );
+          // Sale: result name must share ≥40% of app item's words AND have a promo price
+          const saleMatch = (d.data || []).find(p => {
+            const resultWords = (p.description || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/);
+            const overlap = resultWords.filter(w => appWords.has(w)).length;
+            if (appWords.size === 0 || overlap / appWords.size < 0.40) return false;
+            return (p.items || []).some(pi => {
+              const promo = pi.price?.promo, regular = pi.price?.regular;
+              return promo && promo > 0 && promo !== regular;
+            });
+          });
+          if (saleMatch) {
+            result[item.itemId] = [{ store: 'Harris Teeter', saleName: saleMatch.description || item.name, score: 1, source: 'kroger' }];
           }
         } catch (e) { errorCount++; }
       }));
