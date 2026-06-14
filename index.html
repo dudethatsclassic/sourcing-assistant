@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sourcing Assistant</title>
+  <title>Ahdioh Buddy</title>
+  <link rel="icon" type="image/png" href="Ahdioh-Logo.png">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -71,16 +72,25 @@
     }
 
     .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      line-height: 1;
+    }
+    .logo img {
+      height: 28px;
+      width: 28px;
+      object-fit: contain;
+    }
+    .logo-text {
       font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.3px;
-      line-height: 1;
       color: var(--text);
     }
-
-    .logo em {
+    .logo-text em {
       font-style: normal;
-      color: var(--accent-mid);
+      color: #E8491E;
     }
 
     .header-divider {
@@ -1741,7 +1751,10 @@
 <!-- ── Header ── -->
 <header class="header">
   <div class="header-inner">
-    <div class="logo">Sourcing <em>Assistant</em></div>
+    <div class="logo">
+      <img src="Ahdioh-Logo.png" alt="Ahdioh">
+      <span class="logo-text">Ahdioh <em>Buddy</em></span>
+    </div>
     <div class="header-divider"></div>
     <div class="header-subtitle">WFS Retail Arbitrage</div>
     <div class="header-spinner" id="spinner">
