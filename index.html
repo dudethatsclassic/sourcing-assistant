@@ -2254,14 +2254,18 @@ async function fetchFlippSaleData(appItems) {
           if (!item.name) continue;
           allSaleItems.push({ store, name: item.name, saleWords: flippNormalize(item.name) });
         }
+        console.log(`[Flipp] ${store}: ${(d.items||[]).filter(i=>i.name).length} items fetched`);
       } catch (_) {}
     }));
 
     const result = {};
+    let bestMisses = [];
     for (const appItem of appItems) {
       const byStore = {};
+      let topScore = 0, topMatch = null;
       for (const saleItem of allSaleItems) {
         const s = flippMatchScore(appItem.name, saleItem.saleWords);
+        if (s > topScore) { topScore = s; topMatch = saleItem; }
         if (s >= 0.60) {
           const existing = byStore[saleItem.store];
           if (!existing || s > existing.score) {
@@ -2271,7 +2275,10 @@ async function fetchFlippSaleData(appItems) {
       }
       const matches = Object.values(byStore);
       if (matches.length) result[appItem.itemId] = matches;
+      else if (topScore > 0.30) bestMisses.push({ app: appItem.name, sale: topMatch.name, store: topMatch.store, score: topScore });
     }
+    console.log('[Flipp] matches found:', Object.keys(result).length);
+    console.log('[Flipp] near-misses (top 10):', bestMisses.sort((a,b)=>b.score-a.score).slice(0,10));
     return result;
   } catch (e) {
     console.warn('Flipp sale data fetch failed', e);
