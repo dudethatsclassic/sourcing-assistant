@@ -2230,7 +2230,6 @@ async function fetchFlippSaleData(appItems) {
     const flyersRes = await fetch(FLIPP_FLYERS_URL + FLIPP_POSTAL, { headers: FLIPP_HEADERS });
     const flyersData = await flyersRes.json();
 
-    console.log('[Flipp] all merchants:', (flyersData.flyers || []).map(f => f.merchant));
     const seen = new Set();
     const flyers = [];
     for (const f of flyersData.flyers || []) {
@@ -2244,7 +2243,6 @@ async function fetchFlippSaleData(appItems) {
       }
       if (seen.size === FLIPP_TARGET_STORES.length) break;
     }
-    console.log('[Flipp] matched flyers:', flyers.map(f => f.store));
 
     const allSaleItems = [];
     await Promise.all(flyers.map(async ({ store, id }) => {
@@ -2255,18 +2253,14 @@ async function fetchFlippSaleData(appItems) {
           if (!item.name) continue;
           allSaleItems.push({ store, name: item.name, saleWords: flippNormalize(item.name) });
         }
-        console.log(`[Flipp] ${store}: ${(d.items||[]).filter(i=>i.name).length} items fetched`);
       } catch (_) {}
     }));
 
     const result = {};
-    let bestMisses = [];
     for (const appItem of appItems) {
       const byStore = {};
-      let topScore = 0, topMatch = null;
       for (const saleItem of allSaleItems) {
         const s = flippMatchScore(appItem.name, saleItem.saleWords);
-        if (s > topScore) { topScore = s; topMatch = saleItem; }
         if (s >= 0.60) {
           const existing = byStore[saleItem.store];
           if (!existing || s > existing.score) {
@@ -2276,12 +2270,7 @@ async function fetchFlippSaleData(appItems) {
       }
       const matches = Object.values(byStore);
       if (matches.length) result[appItem.itemId] = matches;
-      else if (topScore > 0.30) bestMisses.push({ app: appItem.name, sale: topMatch.name, store: topMatch.store, score: topScore });
     }
-    const byStore = {};
-    for (const matches of Object.values(result)) for (const m of matches) byStore[m.store] = (byStore[m.store]||0)+1;
-    console.log('[Flipp] matches found:', Object.keys(result).length, byStore);
-    console.log('[Flipp] near-misses (top 10):', bestMisses.sort((a,b)=>b.score-a.score).slice(0,10));
     return result;
   } catch (e) {
     console.warn('Flipp sale data fetch failed', e);
