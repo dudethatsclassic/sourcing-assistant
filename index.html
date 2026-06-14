@@ -2483,10 +2483,11 @@ async function fetchPublixSaleData(appItems) {
               query: PUBLIX_GQL,
             }),
           });
-          if (!res.ok) { errorCount++; return; }
+          if (!res.ok) { errorCount++; console.warn('[Publix] HTTP', res.status, keyword); return; }
           const d = await res.json();
-          const saleItems = (d.data?.storeProductsSavingsSearchResult?.storeProducts || [])
-            .filter(p => p.onSale && p.title);
+          const allItems = d.data?.storeProductsSavingsSearchResult?.storeProducts || [];
+          console.log('[Publix]', keyword, '→', allItems.length, 'total,', allItems.filter(p=>p.onSale).length, 'onSale', allItems.slice(0,2).map(p=>p.title));
+          const saleItems = allItems.filter(p => p.onSale && p.title);
           if (!saleItems.length) return;
 
           const appWords = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
