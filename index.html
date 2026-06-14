@@ -1945,6 +1945,9 @@
     <input class="settings-input" id="settingsClientId" type="password" placeholder="Paste your Client ID…" autocomplete="off" spellcheck="false">
     <div class="settings-label">Client Secret</div>
     <input class="settings-input" id="settingsClientSecret" type="password" placeholder="Paste your Client Secret…" autocomplete="off" spellcheck="false">
+    <div class="settings-subtitle" style="margin-top:16px">Publix token for live Publix sale data.<br>Get it from publix.com → DevTools → Application → Cookies → <strong>AccessTokenJwt</strong></div>
+    <div class="settings-label">Publix AccessTokenJwt</div>
+    <input class="settings-input" id="settingsPublixToken" type="password" placeholder="Paste your AccessTokenJwt…" autocomplete="off" spellcheck="false">
     <div class="settings-note">
       🔒 Saved to your browser's localStorage — not in the code, not on GitHub. Clear browser data to remove them.
     </div>
@@ -2199,7 +2202,7 @@ async function saveShipmentToCloud() {
 
 // ─── Flipp Sale Data ─────────────────────────────────────────────────────────
 const FLIPP_POSTAL        = '27410'; // Greensboro, NC
-const FLIPP_TARGET_STORES = ["lowe's foods", 'lowes foods', 'lowes', 'food lion']; // HT via Kroger API, Publix via direct API
+const FLIPP_TARGET_STORES = ["lowe's foods", 'lowes foods', 'lowes', 'food lion', 'publix']; // HT via Kroger API
 const FLIPP_STOP          = new Set(['or','and','the','with','of','in','a','an','for','to','from','by','at','on','is','it','size','new']);
 const FLIPP_FLYERS_URL    = 'https://backflipp.wishabi.com/flipp/flyers?locale=en-US&postal_code=';
 const FLIPP_FLYER_URL     = 'https://backflipp.wishabi.com/flipp/flyers/';
@@ -2287,10 +2290,11 @@ const KROGER_HT_ZIP = '27410';
 const KROGER_LS_ID  = 'sourcing_kroger_id';
 const KROGER_LS_SEC = 'sourcing_kroger_sec';
 
-// ─── Publix API (direct) ──────────────────────────────────────────────────────
 const PUBLIX_PROXY    = 'https://publix-proxy.natescottsmith.workers.dev';
-const PUBLIX_STORE_ID = '1658'; // Grandover Village, Greensboro NC 27407
-const PUBLIX_GQL_QUERY = `query GetStoreProductsSavingsSearchResultAsync($keyword: String, $skip: Int!, $take: Int!, $facetOverrideStr: String, $facets: String, $sortOrder: String, $ispu: Boolean, $categoryID: String, $minMatch: Int!, $boostVarIndex: Int!, $wildcardSearch: Boolean!, $isPreviewSite: Boolean!, $segmentVarIndex: Int!, $getOrderHistory: Boolean!, $filterQuery: String, $reorderItemCodes: [Int!], $intents: [String!], $searchRetryIndex: Int!, $intentVarIndex: Int!, $boostBuryQuery: String, $source: String, $elevatedProducts: [KeyValuePairOfStringAndStringInput!], $couponId: String, $forceElevation: Boolean, $searchVariation: [KeyValuePairOfStringAndStringInput!], $userCoupon: String) {\n  storeProductsSavingsSearchResult(\n    keyword: $keyword\n    skip: $skip\n    take: $take\n    facetOverrideStr: $facetOverrideStr\n    facets: $facets\n    sortOrder: $sortOrder\n    ispu: $ispu\n    categoryID: $categoryID\n    minMatch: $minMatch\n    boostVarIndex: $boostVarIndex\n    wildcardSearch: $wildcardSearch\n    isPreviewSite: $isPreviewSite\n    segmentVarIndex: $segmentVarIndex\n    getOrderHistory: $getOrderHistory\n    filterQuery: $filterQuery\n    reorderItemCodes: $reorderItemCodes\n    intents: $intents\n    boostBuryQuery: $boostBuryQuery\n    searchRetryIndex: $searchRetryIndex\n    intentVarIndex: $intentVarIndex\n    source: $source\n    elevatedProducts: $elevatedProducts\n    couponId: $couponId\n    forceElevation: $forceElevation\n    searchVariation: $searchVariation\n    userCoupon: $userCoupon\n  ) {\n    storeProducts {\n      title\n      sizeDescription\n      onSale\n      priceLine\n      promoMsg\n      promoType\n      promoValidThruMsg\n      promoTotalSavings\n    }\n    totalCount\n  }\n}`;
+const PUBLIX_STORE_ID = '1658';
+const PUBLIX_LS_TOKEN = 'sourcing_publix_token';
+const PUBLIX_GQL = `query GetStoreProductsSavingsSearchResultAsync($keyword: String, $skip: Int!, $take: Int!, $facetOverrideStr: String, $facets: String, $sortOrder: String, $ispu: Boolean, $categoryID: String, $minMatch: Int!, $boostVarIndex: Int!, $wildcardSearch: Boolean!, $isPreviewSite: Boolean!, $segmentVarIndex: Int!, $getOrderHistory: Boolean!, $filterQuery: String, $reorderItemCodes: [Int!], $intents: [String!], $searchRetryIndex: Int!, $intentVarIndex: Int!, $boostBuryQuery: String, $source: String, $elevatedProducts: [KeyValuePairOfStringAndStringInput!], $couponId: String, $forceElevation: Boolean, $searchVariation: [KeyValuePairOfStringAndStringInput!], $userCoupon: String) {\n  storeProductsSavingsSearchResult(\n    keyword: $keyword\n    skip: $skip\n    take: $take\n    facetOverrideStr: $facetOverrideStr\n    facets: $facets\n    sortOrder: $sortOrder\n    ispu: $ispu\n    categoryID: $categoryID\n    minMatch: $minMatch\n    boostVarIndex: $boostVarIndex\n    wildcardSearch: $wildcardSearch\n    isPreviewSite: $isPreviewSite\n    segmentVarIndex: $segmentVarIndex\n    getOrderHistory: $getOrderHistory\n    filterQuery: $filterQuery\n    reorderItemCodes: $reorderItemCodes\n    intents: $intents\n    boostBuryQuery: $boostBuryQuery\n    searchRetryIndex: $searchRetryIndex\n    intentVarIndex: $intentVarIndex\n    source: $source\n    elevatedProducts: $elevatedProducts\n    couponId: $couponId\n    forceElevation: $forceElevation\n    searchVariation: $searchVariation\n    userCoupon: $userCoupon\n  ) {\n    storeProducts {\n      title\n      sizeDescription\n      onSale\n      priceLine\n      promoMsg\n      promoType\n      promoValidThruMsg\n      promoTotalSavings\n    }\n    totalCount\n  }\n}`;
+
 
 function krogerCreds() {
   return {
@@ -2304,6 +2308,7 @@ function openSettings() {
   const { id, sec } = krogerCreds();
   $('settingsClientId').value     = id;
   $('settingsClientSecret').value = sec;
+  $('settingsPublixToken').value  = localStorage.getItem(PUBLIX_LS_TOKEN) || '';
   $('settingsBackdrop').classList.add('open');
 }
 function closeSettings(e) {
@@ -2311,16 +2316,16 @@ function closeSettings(e) {
   $('settingsBackdrop').classList.remove('open');
 }
 function saveSettings() {
-  const id  = $('settingsClientId').value.trim();
-  const sec = $('settingsClientSecret').value.trim();
-  if (id)  localStorage.setItem(KROGER_LS_ID,  id);  else localStorage.removeItem(KROGER_LS_ID);
-  if (sec) localStorage.setItem(KROGER_LS_SEC, sec); else localStorage.removeItem(KROGER_LS_SEC);
+  const id    = $('settingsClientId').value.trim();
+  const sec   = $('settingsClientSecret').value.trim();
+  const pxTok = $('settingsPublixToken').value.trim();
+  if (id)    localStorage.setItem(KROGER_LS_ID,   id);    else localStorage.removeItem(KROGER_LS_ID);
+  if (sec)   localStorage.setItem(KROGER_LS_SEC,  sec);   else localStorage.removeItem(KROGER_LS_SEC);
+  if (pxTok) localStorage.setItem(PUBLIX_LS_TOKEN, pxTok); else localStorage.removeItem(PUBLIX_LS_TOKEN);
   updateSettingsBtn();
   $('settingsBackdrop').classList.remove('open');
-  // Reset cached token so it re-authenticates with new creds
   _krogerToken = null; _krogerTokenExp = 0; _krogerLocId = null;
-  toast(id && sec ? '✓ Kroger API credentials saved' : 'Kroger credentials cleared');
-  // Re-fetch sale data if items are loaded
+  toast('✓ Settings saved');
   if (items.length) fetchSaleData(items);
 }
 function updateSettingsBtn() {
@@ -2431,41 +2436,34 @@ async function fetchKrogerHTSaleData(appItems) {
 }
 
 async function fetchPublixSaleData(appItems) {
-  if (!PUBLIX_PROXY) return {};
+  const token = localStorage.getItem(PUBLIX_LS_TOKEN);
+  if (!PUBLIX_PROXY || !token) return {};
   try {
-    const body = JSON.stringify({
-      operationName: 'GetStoreProductsSavingsSearchResultAsync',
-      variables: {
-        skip: 0, take: 1000,
-        source: 'WEB_WEEKLYAD_MODAL',
-        sortOrder: 'salesRank asc',
-        minMatch: 0, segmentVarIndex: 0,
-        getOrderHistory: false, intents: [],
-        isPreviewSite: false, reorderItemCodes: null,
-        wildcardSearch: false, filterQuery: '',
-        keyword: '', boostBuryQuery: '',
-        elevatedProducts: [], forceElevation: false,
-        boostVarIndex: 0, searchRetryIndex: 0,
-        intentVarIndex: 1, userCoupon: null,
-        searchVariation: [],
-      },
-      query: PUBLIX_GQL_QUERY,
-    });
-
     const res = await fetch(PUBLIX_PROXY, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'X-Publix-Store': PUBLIX_STORE_ID,
+        'Content-Type':    'application/json',
+        'X-Publix-Store':  PUBLIX_STORE_ID,
+        'X-Publix-Token':  token,
       },
-      body,
+      body: JSON.stringify({
+        operationName: 'GetStoreProductsSavingsSearchResultAsync',
+        variables: {
+          skip: 0, take: 1000, source: 'WEB_WEEKLYAD_MODAL',
+          sortOrder: 'salesRank asc', minMatch: 0, segmentVarIndex: 0,
+          getOrderHistory: false, intents: [], isPreviewSite: false,
+          reorderItemCodes: null, wildcardSearch: false, filterQuery: '',
+          keyword: '', boostBuryQuery: '', elevatedProducts: [],
+          forceElevation: false, boostVarIndex: 0, searchRetryIndex: 0,
+          intentVarIndex: 1, userCoupon: null, searchVariation: [],
+        },
+        query: PUBLIX_GQL,
+      }),
     });
-
     if (!res.ok) { toast(`Publix API error: ${res.status}`, true); return {}; }
     const d = await res.json();
     const saleItems = (d.data?.storeProductsSavingsSearchResult?.storeProducts || [])
       .filter(p => p.onSale && p.title);
-
     if (!saleItems.length) { toast('Publix: no sale items returned', true); return {}; }
 
     const result = {};
@@ -2474,25 +2472,17 @@ async function fetchPublixSaleData(appItems) {
       const appSet = new Set(appWords);
       let bestScore = 0, bestMatch = null;
       for (const p of saleItems) {
-        const saleWords = p.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-        if (!saleWords.length) continue;
-        const matched = saleWords.filter(w => appSet.has(w)).length;
-        const score = Math.min(matched / saleWords.length, matched / Math.max(appWords.length, 1));
+        const sw = p.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+        if (!sw.length) continue;
+        const matched = sw.filter(w => appSet.has(w)).length;
+        const score = Math.min(matched / sw.length, matched / Math.max(appWords.length, 1));
         if (score > bestScore) { bestScore = score; bestMatch = p; }
       }
       if (bestScore >= 0.60 && bestMatch) {
-        result[appItem.itemId] = [{
-          store: 'Publix',
-          saleName: bestMatch.title,
-          promoMsg: bestMatch.promoMsg || '',
-          score: bestScore,
-          source: 'publix',
-        }];
+        result[appItem.itemId] = [{ store: 'Publix', saleName: bestMatch.title, promoMsg: bestMatch.promoMsg || '', score: bestScore, source: 'publix' }];
       }
     }
-
-    const found = Object.keys(result).length;
-    toast(`Publix: ${saleItems.length} sale items, ${found} matched`);
+    toast(`Publix: ${saleItems.length} sale items, ${Object.keys(result).length} matched`);
     return result;
   } catch (e) {
     console.error('[Publix]', e);
@@ -2502,7 +2492,6 @@ async function fetchPublixSaleData(appItems) {
 }
 
 async function fetchSaleData(appItems) {
-  // Run Flipp (Lowes Foods, Food Lion), Kroger (HT), and Publix in parallel
   const [flippResult, krogerResult, publixResult] = await Promise.all([
     fetchFlippSaleData(appItems),
     fetchKrogerHTSaleData(appItems),
@@ -2511,7 +2500,6 @@ async function fetchSaleData(appItems) {
 
   const combined = { ...flippResult };
 
-  // Merge Kroger (Harris Teeter)
   for (const [id, sales] of Object.entries(krogerResult)) {
     if (!combined[id]) combined[id] = [];
     combined[id] = combined[id].filter(s => !s.store.toLowerCase().includes('harris teeter'));
@@ -2519,7 +2507,7 @@ async function fetchSaleData(appItems) {
     if (!combined[id].length) delete combined[id];
   }
 
-  // Merge Publix (replace any Flipp Publix results with direct API results)
+  // Publix direct API overrides Flipp Publix results
   for (const [id, sales] of Object.entries(publixResult)) {
     if (!combined[id]) combined[id] = [];
     combined[id] = combined[id].filter(s => s.store.toLowerCase() !== 'publix');

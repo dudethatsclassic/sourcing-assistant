@@ -25,6 +25,7 @@ export default {
     if (origin && origin !== ALLOWED_ORIGIN) return new Response('Forbidden', { status: 403 });
 
     const storeId = request.headers.get('X-Publix-Store') || '1658';
+    const token   = request.headers.get('X-Publix-Token') || '';
     const body    = await request.text();
 
     try {
@@ -39,6 +40,7 @@ export default {
           'Publixstore':    storeId,
           'X-Src':          'WEB_WEEKLYAD_MODAL',
           'User-Agent':     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+          ...(token ? { 'Cookie': `AccessTokenJwt=${token}` } : {}),
         },
         body,
       });
