@@ -2293,7 +2293,7 @@ const KROGER_LS_SEC = 'sourcing_kroger_sec';
 const PUBLIX_PROXY    = 'https://publix-proxy.natescottsmith.workers.dev';
 const PUBLIX_STORE_ID = '1658';
 const PUBLIX_LS_TOKEN = 'sourcing_publix_token';
-const PUBLIX_GQL = `query GetStoreProductsSavingsSearchResultAsync($keyword: String, $skip: Int!, $take: Int!, $facetOverrideStr: String, $facets: String, $sortOrder: String, $ispu: Boolean, $categoryID: String, $minMatch: Int!, $boostVarIndex: Int!, $wildcardSearch: Boolean!, $isPreviewSite: Boolean!, $segmentVarIndex: Int!, $getOrderHistory: Boolean!, $filterQuery: String, $reorderItemCodes: [Int!], $intents: [String!], $searchRetryIndex: Int!, $intentVarIndex: Int!, $boostBuryQuery: String, $source: String, $elevatedProducts: [KeyValuePairOfStringAndStringInput!], $couponId: String, $forceElevation: Boolean, $searchVariation: [KeyValuePairOfStringAndStringInput!], $userCoupon: String) {\n  storeProductsSavingsSearchResult(\n    keyword: $keyword\n    skip: $skip\n    take: $take\n    facetOverrideStr: $facetOverrideStr\n    facets: $facets\n    sortOrder: $sortOrder\n    ispu: $ispu\n    categoryID: $categoryID\n    minMatch: $minMatch\n    boostVarIndex: $boostVarIndex\n    wildcardSearch: $wildcardSearch\n    isPreviewSite: $isPreviewSite\n    segmentVarIndex: $segmentVarIndex\n    getOrderHistory: $getOrderHistory\n    filterQuery: $filterQuery\n    reorderItemCodes: $reorderItemCodes\n    intents: $intents\n    boostBuryQuery: $boostBuryQuery\n    searchRetryIndex: $searchRetryIndex\n    intentVarIndex: $intentVarIndex\n    source: $source\n    elevatedProducts: $elevatedProducts\n    couponId: $couponId\n    forceElevation: $forceElevation\n    searchVariation: $searchVariation\n    userCoupon: $userCoupon\n  ) {\n    storeProducts {\n      title\n      sizeDescription\n      onSale\n      priceLine\n      promoMsg\n      promoType\n      promoValidThruMsg\n      promoTotalSavings\n    }\n    totalCount\n  }\n}`;
+const PUBLIX_GQL = `query GetStoreProductsSavingsSearchResultAsync($keyword: String, $skip: Int!, $take: Int!, $facetOverrideStr: String, $facets: String, $sortOrder: String, $ispu: Boolean, $categoryID: String, $minMatch: Int!, $boostVarIndex: Int!, $wildcardSearch: Boolean!, $isPreviewSite: Boolean!, $segmentVarIndex: Int!, $getOrderHistory: Boolean!, $filterQuery: String, $reorderItemCodes: [Int!], $intents: [String!], $searchRetryIndex: Int!, $intentVarIndex: Int!, $boostBuryQuery: String, $source: String, $elevatedProducts: [KeyValuePairOfStringAndStringInput!], $couponId: String, $forceElevation: Boolean, $searchVariation: [KeyValuePairOfStringAndStringInput!], $userCoupon: String) {\n  storeProductsSavingsSearchResult(\n    keyword: $keyword\n    skip: $skip\n    take: $take\n    facetOverrideStr: $facetOverrideStr\n    facets: $facets\n    sortOrder: $sortOrder\n    ispu: $ispu\n    categoryID: $categoryID\n    minMatch: $minMatch\n    boostVarIndex: $boostVarIndex\n    wildcardSearch: $wildcardSearch\n    isPreviewSite: $isPreviewSite\n    segmentVarIndex: $segmentVarIndex\n    getOrderHistory: $getOrderHistory\n    filterQuery: $filterQuery\n    reorderItemCodes: $reorderItemCodes\n    intents: $intents\n    boostBuryQuery: $boostBuryQuery\n    searchRetryIndex: $searchRetryIndex\n    intentVarIndex: $intentVarIndex\n    source: $source\n    elevatedProducts: $elevatedProducts\n    couponId: $couponId\n    forceElevation: $forceElevation\n    searchVariation: $searchVariation\n    userCoupon: $userCoupon\n  ) {\n    storeProducts {\n      title\n      titleBrand\n      sizeDescription\n      onSale\n      priceLine\n      promoMsg\n      promoType\n      promoValidThruMsg\n      promoTotalSavings\n    }\n    totalCount\n  }\n}`;
 
 
 function krogerCreds() {
@@ -2466,6 +2466,15 @@ async function fetchPublixSaleData(appItems) {
       .filter(p => p.onSale && p.title);
     if (!saleItems.length) { toast('Publix: no sale items returned', true); return {}; }
 
+    // Build brand-on-sale map for brand-level fallback matching
+    const brandsOnSale = {};
+    for (const p of saleItems) {
+      if (p.titleBrand) {
+        const brand = p.titleBrand.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+        if (brand.length > 2 && !brandsOnSale[brand]) brandsOnSale[brand] = p;
+      }
+    }
+
     const result = {};
     for (const appItem of appItems) {
       const appWords = appItem.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
@@ -2477,6 +2486,17 @@ async function fetchPublixSaleData(appItems) {
         const matched = sw.filter(w => appSet.has(w)).length;
         const score = Math.min(matched / sw.length, matched / Math.max(appWords.length, 1));
         if (score > bestScore) { bestScore = score; bestMatch = p; }
+      }
+      // Brand fallback: if no strong word match, check if a sale brand starts the app item name
+      if (bestScore < 0.60) {
+        const appNameNorm = appItem.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+        for (const [brand, saleItem] of Object.entries(brandsOnSale)) {
+          if (appNameNorm.startsWith(brand + ' ') || appNameNorm.startsWith(brand + '-') || appNameNorm === brand) {
+            bestScore = 0.61;
+            bestMatch = saleItem;
+            break;
+          }
+        }
       }
       if (bestScore >= 0.60 && bestMatch) {
         result[appItem.itemId] = [{ store: 'Publix', saleName: bestMatch.title, promoMsg: bestMatch.promoMsg || '', score: bestScore, source: 'publix' }];
