@@ -2437,12 +2437,12 @@ async function fetchKrogerHTSaleData(appItems) {
 
 async function fetchPublixSaleData(appItems) {
   const token = localStorage.getItem(PUBLIX_LS_TOKEN);
-  if (!PUBLIX_PROXY || !token) return {};
+  if (!token) { toast('Publix: no cookie in Settings — paste your Publix Cookie string', true); return {}; }
 
   const publixItems = appItems.filter(x =>
     (storeTags[x.itemId] || []).some(s => s.toLowerCase().includes('publix'))
   );
-  if (!publixItems.length) { toast('Publix: no items tagged to Publix', true); return {}; }
+  if (!publixItems.length) { toast('Publix: no items tagged to Publix — add Publix tag to items', true); return {}; }
 
   const result = {};
   let errorCount = 0;
