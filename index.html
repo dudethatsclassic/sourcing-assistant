@@ -2441,11 +2441,66 @@ async function fetchKrogerHTSaleData(appItems) {
   }
 }
 
+function matchPublixSaleItems(saleItems, appItems) {
+  const brandsOnSale = {};
+  for (const p of saleItems) {
+    if (p.titleBrand) {
+      const brand = p.titleBrand.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      if (brand.length > 2 && !brandsOnSale[brand]) brandsOnSale[brand] = p;
+    }
+  }
+  const result = {};
+  for (const item of appItems) {
+    const appWords = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+    const appSet   = new Set(appWords);
+    let bestScore  = 0, bestMatch = null;
+    for (const p of saleItems) {
+      const sw = p.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+      if (!sw.length) continue;
+      const matched = sw.filter(w => appSet.has(w)).length;
+      const score   = Math.min(matched / sw.length, matched / Math.max(appWords.length, 1));
+      if (score > bestScore) { bestScore = score; bestMatch = p; }
+    }
+    if (bestScore < 0.60) {
+      const appNameNorm = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+      for (const [brand, saleItem] of Object.entries(brandsOnSale)) {
+        if (appNameNorm.startsWith(brand + ' ') || appNameNorm.startsWith(brand + '-') || appNameNorm === brand) {
+          bestScore = 0.61; bestMatch = saleItem; break;
+        }
+      }
+    }
+    if (bestScore >= 0.60 && bestMatch) {
+      result[item.itemId] = [{ store: 'Publix', saleName: bestMatch.title, promoMsg: bestMatch.promoMsg || '', score: bestScore, source: 'publix' }];
+    }
+  }
+  return result;
+}
+
 async function fetchPublixSaleData(appItems) {
-  const token      = localStorage.getItem(PUBLIX_LS_TOKEN);
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+  // Primary path: use sale items pre-fetched by the Chrome extension
+  try {
+    const cached = localStorage.getItem('sourcing_publix_data');
+    if (cached) {
+      const { items, ts } = JSON.parse(cached);
+      if (items?.length && Date.now() - ts < TWENTY_FOUR_HOURS) {
+        const result = matchPublixSaleItems(items, appItems);
+        toast(`Publix: ${items.length} sale items, ${Object.keys(result).length} matched`);
+        return result;
+      }
+    }
+  } catch (e) {}
+
+  // Fallback: Cloudflare Worker (requires Cookie + Filter Query in Settings)
+  const token       = localStorage.getItem(PUBLIX_LS_TOKEN);
   const filterQuery = localStorage.getItem(PUBLIX_LS_FILTER) || '';
+  if (!token && !filterQuery) {
+    toast('Publix: visit publix.com/savings/weekly-ad to auto-capture data via extension', true);
+    return {};
+  }
   if (!token) { toast('Publix: paste Cookie string in ⚙️ Settings', true); return {}; }
-  if (!filterQuery) { toast('Publix: paste Filter Query in ⚙️ Settings (Payload tab → storeproductssavings)', true); return {}; }
+  if (!filterQuery) { toast('Publix: paste Filter Query in ⚙️ Settings', true); return {}; }
   try {
     const res = await fetch(PUBLIX_PROXY, {
       method: 'POST',
@@ -2468,45 +2523,12 @@ async function fetchPublixSaleData(appItems) {
         query: PUBLIX_GQL,
       }),
     });
-    if (!res.ok) { toast(`Publix API error: ${res.status} — refresh Cookie in ⚙️ Settings`, true); return {}; }
+    if (!res.ok) { toast(`Publix API error: ${res.status} — visit publix.com to refresh via extension`, true); return {}; }
     const d = await res.json();
     const saleItems = (d.data?.storeProductsSavingsSearchResult?.storeProducts || [])
       .filter(p => p.onSale && p.title);
-    if (!saleItems.length) { toast('Publix: 0 sale items — Filter Query may be stale, update in ⚙️ Settings', true); return {}; }
-
-    // Build brand-on-sale map for BOGO brand-level fallback
-    const brandsOnSale = {};
-    for (const p of saleItems) {
-      if (p.titleBrand) {
-        const brand = p.titleBrand.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-        if (brand.length > 2 && !brandsOnSale[brand]) brandsOnSale[brand] = p;
-      }
-    }
-
-    const result = {};
-    for (const item of appItems) {
-      const appWords = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-      const appSet   = new Set(appWords);
-      let bestScore  = 0, bestMatch = null;
-      for (const p of saleItems) {
-        const sw = p.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-        if (!sw.length) continue;
-        const matched = sw.filter(w => appSet.has(w)).length;
-        const score   = Math.min(matched / sw.length, matched / Math.max(appWords.length, 1));
-        if (score > bestScore) { bestScore = score; bestMatch = p; }
-      }
-      if (bestScore < 0.60) {
-        const appNameNorm = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
-        for (const [brand, saleItem] of Object.entries(brandsOnSale)) {
-          if (appNameNorm.startsWith(brand + ' ') || appNameNorm.startsWith(brand + '-') || appNameNorm === brand) {
-            bestScore = 0.61; bestMatch = saleItem; break;
-          }
-        }
-      }
-      if (bestScore >= 0.60 && bestMatch) {
-        result[item.itemId] = [{ store: 'Publix', saleName: bestMatch.title, promoMsg: bestMatch.promoMsg || '', score: bestScore, source: 'publix' }];
-      }
-    }
+    if (!saleItems.length) { toast('Publix: 0 sale items — Filter Query may be stale', true); return {}; }
+    const result = matchPublixSaleItems(saleItems, appItems);
     toast(`Publix: ${saleItems.length} sale items, ${Object.keys(result).length} matched`);
     return result;
   } catch (e) {
