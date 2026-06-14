@@ -16,7 +16,7 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Publix-Store',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Publix-Store, X-Publix-Token',
     };
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
@@ -40,7 +40,7 @@ export default {
           'Publixstore':    storeId,
           'X-Src':          'WEB_WEEKLYAD_MODAL',
           'User-Agent':     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-          ...(token ? { 'Cookie': `AccessTokenJwt=${token}` } : {}),
+          ...(token ? { 'Cookie': token } : {}),
         },
         body,
       });
