@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Publix Cookie Bridge",
+  "version": "1.0",
+  "description": "Auto-captures Publix session cookie for the sourcing assistant.",
+  "permissions": ["cookies", "storage", "webRequest"],
+  "host_permissions": [
+    "https://*.publix.com/*",
+    "https://dudethatsclassic.github.io/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://dudethatsclassic.github.io/sourcing-assistant/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Publix Cookie Bridge"
+  }
+}
