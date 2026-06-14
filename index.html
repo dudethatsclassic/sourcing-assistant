@@ -2278,7 +2278,9 @@ async function fetchFlippSaleData(appItems) {
       if (matches.length) result[appItem.itemId] = matches;
       else if (topScore > 0.30) bestMisses.push({ app: appItem.name, sale: topMatch.name, store: topMatch.store, score: topScore });
     }
-    console.log('[Flipp] matches found:', Object.keys(result).length);
+    const byStore = {};
+    for (const matches of Object.values(result)) for (const m of matches) byStore[m.store] = (byStore[m.store]||0)+1;
+    console.log('[Flipp] matches found:', Object.keys(result).length, byStore);
     console.log('[Flipp] near-misses (top 10):', bestMisses.sort((a,b)=>b.score-a.score).slice(0,10));
     return result;
   } catch (e) {
