@@ -3277,7 +3277,8 @@ function openManualSalePicker(itemId, stores) {
   const item = items.find(x => x.itemId === itemId);
   $('mspItemName').textContent = item?.name || itemId;
   renderMspStores(stores);
-  $('sheetOverlay').style.display = 'block';
+  $('sheetOverlay').style.display = '';
+  $('sheetOverlay').classList.add('open');
   $('manualSalePicker').classList.add('open');
 }
 
@@ -3295,7 +3296,8 @@ function toggleMspStore(store, stores) {
 }
 
 function closeManualSalePicker() {
-  $('sheetOverlay').style.display = 'none';
+  $('sheetOverlay').style.display = '';
+  $('sheetOverlay').classList.remove('open');
   $('manualSalePicker').classList.remove('open');
 }
 
