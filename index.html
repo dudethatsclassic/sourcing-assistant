@@ -1948,6 +1948,8 @@
     <div class="settings-subtitle" style="margin-top:16px">Publix cookies for live Publix sale data.<br>Get it from publix.com → DevTools → Network → click <strong>storeproductssavings</strong> → Headers → copy the full <strong>Cookie</strong> value.</div>
     <div class="settings-label">Publix Cookie String</div>
     <input class="settings-input" id="settingsPublixToken" type="password" placeholder="Paste full cookie string from publix.com…" autocomplete="off" spellcheck="false">
+    <div class="settings-label" style="margin-top:10px">Publix Filter Query <span style="font-weight:400;color:var(--text-dim)">(weekly — from Payload tab)</span></div>
+    <input class="settings-input" id="settingsPublixFilter" type="text" placeholder="promoGroupId::...||promoGroupId::..." autocomplete="off" spellcheck="false">
     <div class="settings-note">
       🔒 Saved to your browser's localStorage — not in the code, not on GitHub. Clear browser data to remove them.
     </div>
@@ -2292,7 +2294,8 @@ const KROGER_LS_SEC = 'sourcing_kroger_sec';
 
 const PUBLIX_PROXY    = 'https://publix-proxy.natescottsmith.workers.dev';
 const PUBLIX_STORE_ID = '1658';
-const PUBLIX_LS_TOKEN = 'sourcing_publix_token';
+const PUBLIX_LS_TOKEN  = 'sourcing_publix_token';
+const PUBLIX_LS_FILTER = 'sourcing_publix_filter';
 const PUBLIX_GQL = `query GetStoreProductsSavingsSearchResultAsync($keyword: String, $skip: Int!, $take: Int!, $facetOverrideStr: String, $facets: String, $sortOrder: String, $ispu: Boolean, $categoryID: String, $minMatch: Int!, $boostVarIndex: Int!, $wildcardSearch: Boolean!, $isPreviewSite: Boolean!, $segmentVarIndex: Int!, $getOrderHistory: Boolean!, $filterQuery: String, $reorderItemCodes: [Int!], $intents: [String!], $searchRetryIndex: Int!, $intentVarIndex: Int!, $boostBuryQuery: String, $source: String, $elevatedProducts: [KeyValuePairOfStringAndStringInput!], $couponId: String, $forceElevation: Boolean, $searchVariation: [KeyValuePairOfStringAndStringInput!], $userCoupon: String) {\n  storeProductsSavingsSearchResult(\n    keyword: $keyword\n    skip: $skip\n    take: $take\n    facetOverrideStr: $facetOverrideStr\n    facets: $facets\n    sortOrder: $sortOrder\n    ispu: $ispu\n    categoryID: $categoryID\n    minMatch: $minMatch\n    boostVarIndex: $boostVarIndex\n    wildcardSearch: $wildcardSearch\n    isPreviewSite: $isPreviewSite\n    segmentVarIndex: $segmentVarIndex\n    getOrderHistory: $getOrderHistory\n    filterQuery: $filterQuery\n    reorderItemCodes: $reorderItemCodes\n    intents: $intents\n    boostBuryQuery: $boostBuryQuery\n    searchRetryIndex: $searchRetryIndex\n    intentVarIndex: $intentVarIndex\n    source: $source\n    elevatedProducts: $elevatedProducts\n    couponId: $couponId\n    forceElevation: $forceElevation\n    searchVariation: $searchVariation\n    userCoupon: $userCoupon\n  ) {\n    storeProducts {\n      title\n      titleBrand\n      sizeDescription\n      onSale\n      priceLine\n      promoMsg\n      promoType\n      promoValidThruMsg\n      promoTotalSavings\n    }\n    totalCount\n  }\n}`;
 
 
@@ -2308,7 +2311,8 @@ function openSettings() {
   const { id, sec } = krogerCreds();
   $('settingsClientId').value     = id;
   $('settingsClientSecret').value = sec;
-  $('settingsPublixToken').value  = localStorage.getItem(PUBLIX_LS_TOKEN) || '';
+  $('settingsPublixToken').value  = localStorage.getItem(PUBLIX_LS_TOKEN)  || '';
+  $('settingsPublixFilter').value = localStorage.getItem(PUBLIX_LS_FILTER) || '';
   $('settingsBackdrop').classList.add('open');
 }
 function closeSettings(e) {
@@ -2322,6 +2326,8 @@ function saveSettings() {
   if (id)    localStorage.setItem(KROGER_LS_ID,   id);    else localStorage.removeItem(KROGER_LS_ID);
   if (sec)   localStorage.setItem(KROGER_LS_SEC,  sec);   else localStorage.removeItem(KROGER_LS_SEC);
   if (pxTok) localStorage.setItem(PUBLIX_LS_TOKEN, pxTok); else localStorage.removeItem(PUBLIX_LS_TOKEN);
+  const pxFilter = $('settingsPublixFilter').value.trim();
+  if (pxFilter) localStorage.setItem(PUBLIX_LS_FILTER, pxFilter); else localStorage.removeItem(PUBLIX_LS_FILTER);
   updateSettingsBtn();
   $('settingsBackdrop').classList.remove('open');
   _krogerToken = null; _krogerTokenExp = 0; _krogerLocId = null;
@@ -2452,7 +2458,8 @@ async function fetchPublixSaleData(appItems) {
           skip: 0, take: 1000, source: 'WEB_WEEKLYAD_MODAL',
           sortOrder: 'salesRank asc', minMatch: 0, segmentVarIndex: 0,
           getOrderHistory: false, intents: [], isPreviewSite: false,
-          reorderItemCodes: null, wildcardSearch: false, filterQuery: '',
+          reorderItemCodes: null, wildcardSearch: false,
+          filterQuery: localStorage.getItem(PUBLIX_LS_FILTER) || '',
           keyword: '', boostBuryQuery: '', elevatedProducts: [],
           forceElevation: false, boostVarIndex: 0, searchRetryIndex: 0,
           intentVarIndex: 1, userCoupon: null, searchVariation: [],
