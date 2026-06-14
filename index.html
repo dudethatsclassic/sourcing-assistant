@@ -3329,7 +3329,7 @@ function storeTagBtn(itemId) {
   if (stores && stores.length) {
     return `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">` +
       stores.map(s =>
-        `<button class="store-tag-btn store-tag-set" onclick="openStoreSheet('${escHtml(itemId)}')">${storeLogoImg(s)} ${escHtml(s)}</button>`
+        `<button class="store-tag-btn store-tag-set" title="${escHtml(s)}" onclick="openStoreSheet('${escHtml(itemId)}')">${storeLogoImg(s, 18)}</button>`
       ).join('') +
       `<button class="store-tag-btn store-tag-empty" onclick="openStoreSheet('${escHtml(itemId)}')">+</button>` +
     `</div>`;
@@ -3385,7 +3385,7 @@ function renderListRow(item, delay = 0) {
 
   const stores = storeTags[item.itemId] || [];
   const storeHtml = stores.map(s =>
-    `<button class="list-store-chip" onclick="openStoreSheet('${escHtml(item.itemId)}')">${storeLogoImg(s, 12)} ${escHtml(s)}</button>`
+    `<button class="list-store-chip" title="${escHtml(s)}" onclick="openStoreSheet('${escHtml(item.itemId)}')">${storeLogoImg(s, 14)}</button>`
   ).join('') + `<button class="list-store-chip list-store-add" onclick="openStoreSheet('${escHtml(item.itemId)}')">+</button>`;
 
   const stockClass = item.currentStock === 0 ? 'val-red' : '';
@@ -3649,7 +3649,7 @@ function renderFilterChips() {
   }
   html += stores.map(s =>
     `<button class="filter-chip${activeFilter === s ? ' active' : ''}"
-       onclick="setFilter('${escHtml(s)}')">${storeLogoImg(s, 14) + ' '}${escHtml(s)}</button>`
+       title="${escHtml(s)}" onclick="setFilter('${escHtml(s)}')">${storeLogoImg(s, 18)}</button>`
   ).join('');
 
   // Go Shopping button — only when a real store is selected
