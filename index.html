@@ -2442,6 +2442,10 @@ async function fetchKrogerHTSaleData(appItems) {
 }
 
 function matchPublixSaleItems(saleItems, appItems) {
+  const emeraldItems = saleItems.filter(p => p.title?.toLowerCase().includes('emerald'));
+  if (emeraldItems.length) console.log('[Publix] Emerald items:', emeraldItems.map(p => ({ title: p.title, titleBrand: p.titleBrand, onSale: p.onSale })));
+  else console.log('[Publix] No Emerald items found in', saleItems.length, 'sale items');
+
   const brandsOnSale = {};
   for (const p of saleItems) {
     if (p.titleBrand) {
@@ -2449,6 +2453,7 @@ function matchPublixSaleItems(saleItems, appItems) {
       if (brand.length > 2 && !brandsOnSale[brand]) brandsOnSale[brand] = p;
     }
   }
+  console.log('[Publix] brands on sale:', Object.keys(brandsOnSale).filter(b => b.startsWith('e')));
   const result = {};
   for (const item of appItems) {
     const appWords = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
