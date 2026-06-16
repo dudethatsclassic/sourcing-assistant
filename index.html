@@ -2800,7 +2800,7 @@ function parseSheetCSVText(csvText) {
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
     if (sellPrice > 0) entry.sellPrices.push(sellPrice);
-    if (profit !== null && profit !== 0) entry.profits.push(profit);
+    if (profit !== null && profit > 0) entry.profits.push(profit);
     if (!entry.image && img) entry.image = img;
   }
   return map;
@@ -2829,7 +2829,7 @@ function parseSheetRowsFallback(rows) {
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
     if (sellPrice > 0) entry.sellPrices.push(sellPrice);
-    if (profit !== null && profit !== 0) entry.profits.push(profit);
+    if (profit !== null && profit > 0) entry.profits.push(profit);
     if (!entry.image && img) entry.image = img;
   });
   return map;
