@@ -2791,7 +2791,8 @@ function parseSheetCSVText(csvText) {
     const img = imgCol >= 0 ? (row[imgCol] || '').trim() : '';
 
     const sellPrice = sellCol >= 0 ? num(row[sellCol]) : 0;
-    const profit    = profitCol >= 0 ? num(row[profitCol]) : null;
+    const profitRaw = profitCol >= 0 ? num(row[profitCol]) : null;
+    const profit    = profitRaw !== null ? profitRaw / qty : null;
     if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], profits: [], image: null });
     const entry = map.get(id);
     if (!entry.name && name) entry.name = name;
