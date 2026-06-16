@@ -2784,10 +2784,9 @@ function parseSheetCSVText(csvText) {
     const rawName = nameCol >= 0 ? (row[nameCol] || '').trim() : '';
     const name = cleanName(rawName);
 
-    // Skip multi-unit rows
     const qty = qtyCol >= 0 ? (parseInt(row[qtyCol], 10) || 1) : 1;
-    if (qty > 1) continue;
-    const price = priceCol >= 0 ? num(row[priceCol]) : 0;
+    // Only use cost for single-unit rows (multi-unit cost is ambiguous per-unit)
+    const price = (qty === 1 && priceCol >= 0) ? num(row[priceCol]) : 0;
 
     const img = imgCol >= 0 ? (row[imgCol] || '').trim() : '';
 
