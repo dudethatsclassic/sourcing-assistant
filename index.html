@@ -2761,7 +2761,7 @@ function parseSheetCSVText(csvText) {
           if (/^sell.?price$|^walmart.?price$|^list.?price$|^msrp$|^retail$|^retail.?price$|^wmt.?price$/.test(hn)) sellCol = k;
           if (/^image.?url$|^image$|^img$|^photo$/.test(hn)) imgCol = k;
           if (/^qty$|^quantity$/.test(hn)) qtyCol = k;
-          if (/^profit$/.test(hn)) profitCol = k;
+          if (/^profit(\/loss)?$/.test(hn)) profitCol = k;
         });
         break;
       }
@@ -2812,7 +2812,7 @@ function parseSheetRowsFallback(rows) {
   const priceCol    = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
   const sellPriceCol= findCol(s, ['sell_price', 'walmart_price', 'list_price', 'msrp', 'retail', 'retail_price', 'wmt_price']);
   const imgCol      = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
-  const profitCol   = findCol(s, ['profit']);
+  const profitCol   = findCol(s, ['profit', 'profit/loss']);
   const map = new Map();
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
