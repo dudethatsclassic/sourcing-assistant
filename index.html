@@ -4107,7 +4107,11 @@ function renderSummary(all) {
 }
 
 function setUrgencyFilter(val) {
-  urgencyFilter = urgencyFilter === val ? null : val;
+  if (val === null || urgencyFilter === val) {
+    urgencyFilter = null;
+  } else {
+    urgencyFilter = val;
+  }
   renderGrid(sortItems(items, $('sortSelect').value));
   renderSummary(items.filter(x => !archivedIds.has(x.itemId)));
 }
