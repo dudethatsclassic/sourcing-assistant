@@ -3166,7 +3166,7 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
 
     let urgency;
     if (inv.currentStock === 0 && inv.inbound === 0) urgency = 'critical';
-    else if (onOrder < parLevel * 0.5)               urgency = 'low';
+    else if (inv.currentStock === 0 || onOrder < parLevel * 0.5) urgency = 'low';
     else                                              urgency = 'ok';
 
     out.push({
