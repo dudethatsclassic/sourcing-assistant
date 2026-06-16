@@ -1862,6 +1862,7 @@
           <option value="stock-asc">Lowest Stock First</option>
           <option value="buy-desc">Most to Buy First</option>
           <option value="velocity-desc">Fastest Moving</option>
+          <option value="margin-desc">Best Margin First</option>
           <option value="name-asc">Name A–Z</option>
         </select>
         <div class="view-toggle">
@@ -2447,10 +2448,6 @@ async function fetchKrogerHTSaleData(appItems) {
 }
 
 function matchPublixSaleItems(saleItems, appItems) {
-  const emeraldItems = saleItems.filter(p => p.title?.toLowerCase().includes('emerald'));
-  if (emeraldItems.length) console.log('[Publix] Emerald items:', emeraldItems.map(p => ({ title: p.title, titleBrand: p.titleBrand, onSale: p.onSale })));
-  else console.log('[Publix] No Emerald items found in', saleItems.length, 'sale items');
-
   const brandsOnSale = {};
   for (const p of saleItems) {
     if (p.titleBrand) {
@@ -2458,7 +2455,6 @@ function matchPublixSaleItems(saleItems, appItems) {
       if (brand.length > 2 && !brandsOnSale[brand]) brandsOnSale[brand] = p;
     }
   }
-  console.log('[Publix] brands on sale:', Object.keys(brandsOnSale).filter(b => b.startsWith('e')));
   const result = {};
   for (const item of appItems) {
     const appWords = item.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
@@ -2750,7 +2746,7 @@ function parseSheetCSVText(csvText) {
   const allRows = lines.map(parseLine);
 
   // Scan for the actual header row containing "Item ID"
-  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, imgCol = -1, qtyCol = -1;
+  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, sellCol = -1, imgCol = -1, qtyCol = -1;
 
   for (let i = 0; i < allRows.length; i++) {
     const row = allRows[i];
@@ -2762,6 +2758,7 @@ function parseSheetCSVText(csvText) {
           const hn = h.trim().toLowerCase();
           if (/^(item|product name|product|name|title)$/.test(hn)) nameCol = k;
           if (/^cost$|^price$|^buy.?price$|^purchase.?price$/.test(hn)) priceCol = k;
+          if (/^sell.?price$|^walmart.?price$|^list.?price$|^msrp$|^retail$|^retail.?price$|^wmt.?price$/.test(hn)) sellCol = k;
           if (/^image.?url$|^image$|^img$|^photo$/.test(hn)) imgCol = k;
           if (/^qty$|^quantity$/.test(hn)) qtyCol = k;
         });
@@ -2793,10 +2790,12 @@ function parseSheetCSVText(csvText) {
 
     const img = imgCol >= 0 ? (row[imgCol] || '').trim() : '';
 
-    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], image: null });
+    const sellPrice = sellCol >= 0 ? num(row[sellCol]) : 0;
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrice: null, image: null });
     const entry = map.get(id);
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
+    if (sellPrice > 0 && !entry.sellPrice) entry.sellPrice = sellPrice;
     if (!entry.image && img) entry.image = img;
   }
   return map;
@@ -2805,21 +2804,24 @@ function parseSheetCSVText(csvText) {
 function parseSheetRowsFallback(rows) {
   if (!rows.length) return new Map();
   const s = rows[0];
-  const idCol    = findCol(s, ['item_id', 'itemid', 'item', 'sku', 'id', 'asin', 'upc']);
-  const nameCol  = findCol(s, ['product_name', 'name', 'title', 'description', 'product']);
-  const priceCol = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
-  const imgCol   = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
+  const idCol       = findCol(s, ['item_id', 'itemid', 'item', 'sku', 'id', 'asin', 'upc']);
+  const nameCol     = findCol(s, ['product_name', 'name', 'title', 'description', 'product']);
+  const priceCol    = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
+  const sellPriceCol= findCol(s, ['sell_price', 'walmart_price', 'list_price', 'msrp', 'retail', 'retail_price', 'wmt_price']);
+  const imgCol      = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
   const map = new Map();
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
     if (!id) return;
-    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], image: null });
-    const entry = map.get(id);
-    const name  = nameCol  ? (row[nameCol]  || '').trim() : '';
-    const price = priceCol ? num(row[priceCol]) : 0;
-    const img   = imgCol   ? (row[imgCol]   || '').trim() : '';
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrice: null, image: null });
+    const entry     = map.get(id);
+    const name      = nameCol      ? (row[nameCol]      || '').trim() : '';
+    const price     = priceCol     ? num(row[priceCol])     : 0;
+    const sellPrice = sellPriceCol ? num(row[sellPriceCol]) : 0;
+    const img       = imgCol       ? (row[imgCol]       || '').trim() : '';
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
+    if (sellPrice > 0 && !entry.sellPrice) entry.sellPrice = sellPrice;
     if (!entry.image && img) entry.image = img;
   });
   return map;
@@ -3111,7 +3113,7 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
 
   const out = [];
   allIds.forEach(id => {
-    const sheet    = sheetMap.get(id) || { itemId: id, name: '', prices: [], image: null };
+    const sheet    = sheetMap.get(id) || { itemId: id, name: '', prices: [], sellPrice: null, image: null };
     const inv      = invMap.get(id)   || { itemId: id, currentStock: 0, inbound: 0 };
     const shortVel = velMap.get(id)   || { itemId: id, weeklySold: 0, isNew: false };
     const longVel  = longVelMap?.get(id);
@@ -3154,6 +3156,7 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
       maxPrice,
       urgency,
       isNew,
+      sellPrice: sheet.sellPrice || null,
       image: sheet.image || null,
     });
   });
@@ -3168,6 +3171,11 @@ function sortItems(arr, mode) {
     case 'stock-asc':     return a.sort((x, y) => x.currentStock - y.currentStock);
     case 'buy-desc':      return a.sort((x, y) => y.suggestBuy - x.suggestBuy);
     case 'velocity-desc': return a.sort((x, y) => y.weekly - x.weekly);
+    case 'margin-desc':   return a.sort((x, y) => {
+      const mx = x.sellPrice && x.minPrice ? (x.sellPrice - x.minPrice) / x.sellPrice : -1;
+      const my = y.sellPrice && y.minPrice ? (y.sellPrice - y.minPrice) / y.sellPrice : -1;
+      return my - mx;
+    });
     case 'name-asc':      return a.sort((x, y) => x.name.localeCompare(y.name));
     default:              return a;
   }
@@ -3176,57 +3184,21 @@ function sortItems(arr, mode) {
 // ─── Walmart Image Fetch ──────────────────────────────────────────────────────
 const imgCache = {};
 
-async function checkLocalImage(itemId) {
-  const exts = ['jpg', 'jpeg', 'png', 'webp'];
-  for (const ext of exts) {
+async function fetchWalmartImage(itemId) {
+  if (imgCache[itemId] !== undefined) return imgCache[itemId];
+  for (const ext of ['jpg', 'png']) {
     const url = `images/${itemId}.${ext}`;
     try {
       const res = await fetch(url, { method: 'HEAD' });
-      if (res.ok) return url;
+      if (res.ok) { imgCache[itemId] = url; return url; }
     } catch { }
   }
+  imgCache[itemId] = null;
   return null;
 }
 
-async function fetchWalmartImage(itemId) {
-  if (imgCache[itemId] !== undefined) return imgCache[itemId];
-
-  // Try local image first
-  const local = await checkLocalImage(itemId);
-  if (local) { imgCache[itemId] = local; return local; }
-
-  // Fall back to proxy
-  try {
-    const proxyUrl =
-      'https://api.allorigins.win/get?url=' +
-      encodeURIComponent('https://www.walmart.com/ip/' + itemId);
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(7000) });
-    if (!res.ok) { imgCache[itemId] = null; return null; }
-    const data = await res.json();
-    const html = data.contents || '';
-    const patterns = [
-      /property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-      /content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-      /name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
-    ];
-    for (const p of patterns) {
-      const m = html.match(p);
-      if (m && m[1] && m[1].startsWith('http')) {
-        imgCache[itemId] = m[1];
-        return m[1];
-      }
-    }
-    imgCache[itemId] = null;
-    return null;
-  } catch {
-    imgCache[itemId] = null;
-    return null;
-  }
-}
-
 async function enrichImagesProgressively(itemsToFetch) {
-  const BATCH = 3;
-  const DELAY = 600;
+  const BATCH = 8;
   for (let i = 0; i < itemsToFetch.length; i += BATCH) {
     const batch = itemsToFetch.slice(i, i + BATCH);
     await Promise.all(batch.map(async item => {
@@ -3234,9 +3206,6 @@ async function enrichImagesProgressively(itemsToFetch) {
       item.image = img;
       updateCardImage(item);
     }));
-    if (i + BATCH < itemsToFetch.length) {
-      await new Promise(r => setTimeout(r, DELAY));
-    }
   }
 }
 
@@ -3275,6 +3244,38 @@ function badgeClass(u) {
 
 function badgeLabel(u) {
   return u === 'critical' ? 'Out of Stock' : u === 'low' ? 'Running Low' : 'In Stock';
+}
+
+function marginColor(pct) {
+  return pct >= 25 ? 'var(--green)' : pct >= 12 ? 'var(--orange)' : 'var(--red)';
+}
+
+function priceFooterHtml(item) {
+  const cost = item.minPrice;
+  const sell = item.sellPrice;
+  if (sell && cost) {
+    const margin    = sell - cost;
+    const marginPct = margin / sell * 100;
+    return `
+      <div class="card-footer">
+        <div>
+          <div class="price-label">Cost → Sell</div>
+          <div class="price-value">${fmtPrice(cost)} → ${fmtPrice(sell)}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price-label">Margin (gross)</div>
+          <div class="price-value" style="color:${marginColor(marginPct)}">${fmtPrice(margin)} (${marginPct.toFixed(0)}%)</div>
+        </div>
+      </div>`;
+  }
+  if (cost) {
+    return `
+      <div class="card-footer">
+        <span class="price-label">Typical buy price</span>
+        <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
+      </div>`;
+  }
+  return '';
 }
 
 function renderCard(item, delay = 0) {
@@ -3316,10 +3317,7 @@ function renderCard(item, delay = 0) {
           <div class="stat-box-value">${item.weekly % 1 === 0 ? item.weekly : item.weekly.toFixed(1)}<span class="sub">/wk</span></div>
         </div>
       </div>
-      <div class="card-footer">
-        <span class="price-label">Typical buy price</span>
-        <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
-      </div>
+      ${priceFooterHtml(item)}
       ${saleBadgeHtml(item.itemId)}
       ${manualSaleToggle(item.itemId, false)}
       <div class="card-store">
@@ -3530,6 +3528,7 @@ function renderListRow(item, delay = 0) {
     <div class="list-name-col">
       <div class="list-name">${escHtml(item.name)}</div>
       <div class="list-id">${escHtml(item.itemId)}</div>
+      ${item.sellPrice && item.minPrice ? (() => { const m = item.sellPrice - item.minPrice; const pct = m / item.sellPrice * 100; return `<div style="font-size:11px;font-weight:600;color:${marginColor(pct)}">${fmtPrice(m)} margin (${pct.toFixed(0)}% gross)</div>`; })() : ''}
       ${listSaleBadgeHtml(item.itemId)}
       ${manualSaleToggle(item.itemId, true)}
     </div>
@@ -4088,7 +4087,7 @@ function renderSummary(all) {
     : '';
 
   $('summaryBar').innerHTML = `
-    <div class="stat-pill${urgencyFilter === null ? '' : ''}" onclick="setUrgencyFilter(null)">
+    <div class="stat-pill${urgencyFilter === null ? ' active' : ''}" onclick="setUrgencyFilter(null)">
       <div class="stat-pill-label">Total SKUs</div>
       <div class="stat-pill-value">${all.length}</div>
     </div>
