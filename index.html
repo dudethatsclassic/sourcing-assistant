@@ -2745,7 +2745,7 @@ function parseSheetCSVText(csvText) {
   const allRows = lines.map(parseLine);
 
   // Scan for the actual header row containing "Item ID"
-  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, sellCol = -1, imgCol = -1, qtyCol = -1;
+  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, sellCol = -1, imgCol = -1, qtyCol = -1, profitCol = -1;
 
   for (let i = 0; i < allRows.length; i++) {
     const row = allRows[i];
@@ -2760,6 +2760,7 @@ function parseSheetCSVText(csvText) {
           if (/^sell.?price$|^walmart.?price$|^list.?price$|^msrp$|^retail$|^retail.?price$|^wmt.?price$/.test(hn)) sellCol = k;
           if (/^image.?url$|^image$|^img$|^photo$/.test(hn)) imgCol = k;
           if (/^qty$|^quantity$/.test(hn)) qtyCol = k;
+          if (/^profit$/.test(hn)) profitCol = k;
         });
         break;
       }
@@ -2790,11 +2791,13 @@ function parseSheetCSVText(csvText) {
     const img = imgCol >= 0 ? (row[imgCol] || '').trim() : '';
 
     const sellPrice = sellCol >= 0 ? num(row[sellCol]) : 0;
-    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], image: null });
+    const profit    = profitCol >= 0 ? num(row[profitCol]) : null;
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], profits: [], image: null });
     const entry = map.get(id);
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
     if (sellPrice > 0) entry.sellPrices.push(sellPrice);
+    if (profit !== null && profit !== 0) entry.profits.push(profit);
     if (!entry.image && img) entry.image = img;
   }
   return map;
@@ -2808,19 +2811,22 @@ function parseSheetRowsFallback(rows) {
   const priceCol    = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
   const sellPriceCol= findCol(s, ['sell_price', 'walmart_price', 'list_price', 'msrp', 'retail', 'retail_price', 'wmt_price']);
   const imgCol      = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
+  const profitCol   = findCol(s, ['profit']);
   const map = new Map();
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
     if (!id) return;
-    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], image: null });
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], profits: [], image: null });
     const entry     = map.get(id);
     const name      = nameCol      ? (row[nameCol]      || '').trim() : '';
     const price     = priceCol     ? num(row[priceCol])     : 0;
     const sellPrice = sellPriceCol ? num(row[sellPriceCol]) : 0;
+    const profit    = profitCol    ? num(row[profitCol])    : null;
     const img       = imgCol       ? (row[imgCol]       || '').trim() : '';
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
     if (sellPrice > 0) entry.sellPrices.push(sellPrice);
+    if (profit !== null && profit !== 0) entry.profits.push(profit);
     if (!entry.image && img) entry.image = img;
   });
   return map;
@@ -3137,6 +3143,8 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
     const avgCost    = prices.length ? prices.reduce((s, p) => s + p, 0) / prices.length : null;
     const sellPrices = sheet.sellPrices || [];
     const avgSell    = sellPrices.length ? sellPrices.reduce((s, p) => s + p, 0) / sellPrices.length : null;
+    const profits    = sheet.profits || [];
+    const avgProfit  = profits.length ? profits.reduce((s, p) => s + p, 0) / profits.length : null;
     const parLevel  = Math.ceil(weekly * weeksTarget);
     const onOrder   = inv.currentStock + inv.inbound;
     const suggestBuy = Math.max(0, parLevel - onOrder);
@@ -3160,6 +3168,7 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
       isNew,
       avgCost,
       avgSell,
+      avgProfit,
       image: sheet.image || null,
     });
   });
@@ -3291,6 +3300,12 @@ function renderCard(item, delay = 0) {
           <span class="price-label">Typical buy price</span>
           <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
         `}
+        ${item.avgProfit != null ? `
+          <div style="width:100%;margin-top:4px;display:flex;align-items:center;justify-content:space-between">
+            <div class="price-label">Avg Profit</div>
+            <div class="price-value" style="color:${item.avgProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${item.avgProfit < 0 ? '-$' + Math.abs(item.avgProfit).toFixed(2) : '$' + item.avgProfit.toFixed(2)}</div>
+          </div>
+        ` : ''}
       </div>
       ${saleBadgeHtml(item.itemId)}
       ${manualSaleToggle(item.itemId, false)}
