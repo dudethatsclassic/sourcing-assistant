@@ -471,10 +471,22 @@
       letter-spacing: 0.2px;
     }
 
+    .badge-stack {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .badge-stack .badge { position: static; }
+
     .badge-critical { background: var(--red-dim); color: var(--red); }
     .badge-low      { background: var(--orange-dim); color: var(--orange); }
     .badge-ok       { background: var(--green-dim); color: var(--green); }
     .badge-new      { background: #eef; color: #55c; border: 1px solid #d0d0f0; }
+    .badge-inbound  { background: var(--accent-dim); color: var(--accent-mid); }
 
     /* Card body */
     .card-body { padding: 15px 16px 16px; }
@@ -500,7 +512,7 @@
 
     .stats-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 7px;
     }
 
@@ -3252,10 +3264,8 @@ function badgeClass(u) {
   return u === 'critical' ? 'badge-critical' : u === 'low' ? 'badge-low' : 'badge-ok';
 }
 
-function badgeLabel(u, stock) {
-  if (u === 'critical') return 'Out of Stock';
-  if (u === 'low') return 'Running Low';
-  return stock === 0 ? 'Inbound' : 'In Stock';
+function badgeLabel(u) {
+  return u === 'critical' ? 'Out of Stock' : u === 'low' ? 'Running Low' : 'In Stock';
 }
 
 function renderCard(item, delay = 0) {
@@ -3270,7 +3280,10 @@ function renderCard(item, delay = 0) {
   el.innerHTML = `
     <div class="card-img">
       ${imgTag(item)}
-      <div class="badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency, item.currentStock)}</div>
+      <div class="badge-stack">
+        <div class="badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+        ${item.inbound > 0 ? `<div class="badge badge-inbound">${item.inbound} Inbound</div>` : ''}
+      </div>
       ${item.isNew ? '<div class="badge badge-new" style="top:10px;left:10px;right:auto">🆕 New</div>' : ''}
       <button class="card-archive-btn" onclick="toggleArchive('${escHtml(item.itemId)}')"
         title="${archivedIds.has(item.itemId) ? 'Restore SKU' : 'Hide SKU'}"
@@ -3283,10 +3296,6 @@ function renderCard(item, delay = 0) {
         <div class="stat-box">
           <div class="stat-box-label">In Stock</div>
           <div class="stat-box-value ${stockClass}">${item.currentStock}</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-box-label">Inbound</div>
-          <div class="stat-box-value val-muted">${item.inbound}</div>
         </div>
         <div class="stat-box">
           <div class="stat-box-label">Buy Now</div>
@@ -3526,17 +3535,14 @@ function renderListRow(item, delay = 0) {
       ${manualSaleToggle(item.itemId, true)}
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
-      <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency, item.currentStock)}</div>
+      <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
+      ${item.inbound > 0 ? `<div class="list-badge badge-inbound">${item.inbound} Inbound</div>` : ''}
       ${item.isNew ? '<div class="list-badge badge-new">🆕 New</div>' : ''}
     </div>
     <div class="list-stats-group">
       <div class="list-stat">
         <span class="list-stat-label">In Stock</span>
         <span class="list-stat-value ${stockClass}">${item.currentStock}</span>
-      </div>
-      <div class="list-stat">
-        <span class="list-stat-label">Inbound</span>
-        <span class="list-stat-value val-muted">${item.inbound}</span>
       </div>
       <div class="list-stat">
         <span class="list-stat-label">Buy</span>
