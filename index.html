@@ -3165,9 +3165,9 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
     const suggestBuy = Math.max(0, parLevel - onOrder);
 
     let urgency;
-    if (inv.currentStock === 0 && inv.inbound === 0) urgency = 'critical';
-    else if (inv.currentStock === 0 || onOrder < parLevel * 0.5) urgency = 'low';
-    else                                              urgency = 'ok';
+    if (inv.currentStock === 0)        urgency = 'critical';
+    else if (onOrder < parLevel * 0.5) urgency = 'low';
+    else                               urgency = 'ok';
 
     out.push({
       itemId: id,
