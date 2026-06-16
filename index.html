@@ -2682,6 +2682,10 @@ function cleanName(str) {
     .replace(/\s*[-|]?\s*\bexp\.?\s*\d{1,2}[\/-]\d{1,2}([\/-]\d{2,4})?\b/gi, '')
     // "best by" / "bb" dates in parens
     .replace(/\s*\(b\.?b\.?\s*\d[^)]*\)/gi, '')
+    // bare date in parens like (3/10/27) or (1/12/2027)
+    .replace(/\s*\(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\)/g, '')
+    // trailing quantity in parens like (2), (3)
+    .replace(/\s*\(\d+\)\s*$/, '')
     // trailing whitespace or stray punctuation
     .replace(/[\s,;|/-]+$/, '')
     .trim();
