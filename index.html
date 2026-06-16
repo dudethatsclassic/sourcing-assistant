@@ -2745,7 +2745,7 @@ function parseSheetCSVText(csvText) {
   const allRows = lines.map(parseLine);
 
   // Scan for the actual header row containing "Item ID"
-  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, imgCol = -1, qtyCol = -1;
+  let headerIdx = -1, idCol = -1, nameCol = -1, priceCol = -1, sellCol = -1, imgCol = -1, qtyCol = -1;
 
   for (let i = 0; i < allRows.length; i++) {
     const row = allRows[i];
@@ -2757,6 +2757,7 @@ function parseSheetCSVText(csvText) {
           const hn = h.trim().toLowerCase();
           if (/^(item|product name|product|name|title)$/.test(hn)) nameCol = k;
           if (/^cost$|^price$|^buy.?price$|^purchase.?price$/.test(hn)) priceCol = k;
+          if (/^sell.?price$|^walmart.?price$|^list.?price$|^msrp$|^retail$|^retail.?price$|^wmt.?price$/.test(hn)) sellCol = k;
           if (/^image.?url$|^image$|^img$|^photo$/.test(hn)) imgCol = k;
           if (/^qty$|^quantity$/.test(hn)) qtyCol = k;
         });
@@ -2788,10 +2789,12 @@ function parseSheetCSVText(csvText) {
 
     const img = imgCol >= 0 ? (row[imgCol] || '').trim() : '';
 
-    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], image: null });
+    const sellPrice = sellCol >= 0 ? num(row[sellCol]) : 0;
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], image: null });
     const entry = map.get(id);
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
+    if (sellPrice > 0) entry.sellPrices.push(sellPrice);
     if (!entry.image && img) entry.image = img;
   }
   return map;
@@ -2800,21 +2803,24 @@ function parseSheetCSVText(csvText) {
 function parseSheetRowsFallback(rows) {
   if (!rows.length) return new Map();
   const s = rows[0];
-  const idCol    = findCol(s, ['item_id', 'itemid', 'item', 'sku', 'id', 'asin', 'upc']);
-  const nameCol  = findCol(s, ['product_name', 'name', 'title', 'description', 'product']);
-  const priceCol = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
-  const imgCol   = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
+  const idCol       = findCol(s, ['item_id', 'itemid', 'item', 'sku', 'id', 'asin', 'upc']);
+  const nameCol     = findCol(s, ['product_name', 'name', 'title', 'description', 'product']);
+  const priceCol    = findCol(s, ['purchase_price', 'price', 'cost', 'buy_price', 'paid']);
+  const sellPriceCol= findCol(s, ['sell_price', 'walmart_price', 'list_price', 'msrp', 'retail', 'retail_price', 'wmt_price']);
+  const imgCol      = findCol(s, ['image_url', 'image', 'img', 'photo', 'thumbnail', 'picture']);
   const map = new Map();
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
     if (!id) return;
-    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], image: null });
-    const entry = map.get(id);
-    const name  = nameCol  ? (row[nameCol]  || '').trim() : '';
-    const price = priceCol ? num(row[priceCol]) : 0;
-    const img   = imgCol   ? (row[imgCol]   || '').trim() : '';
+    if (!map.has(id)) map.set(id, { itemId: id, name: '', prices: [], sellPrices: [], image: null });
+    const entry     = map.get(id);
+    const name      = nameCol      ? (row[nameCol]      || '').trim() : '';
+    const price     = priceCol     ? num(row[priceCol])     : 0;
+    const sellPrice = sellPriceCol ? num(row[sellPriceCol]) : 0;
+    const img       = imgCol       ? (row[imgCol]       || '').trim() : '';
     if (!entry.name && name) entry.name = name;
     if (price > 0) entry.prices.push(price);
+    if (sellPrice > 0) entry.sellPrices.push(sellPrice);
     if (!entry.image && img) entry.image = img;
   });
   return map;
@@ -3106,7 +3112,7 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
 
   const out = [];
   allIds.forEach(id => {
-    const sheet    = sheetMap.get(id) || { itemId: id, name: '', prices: [], image: null };
+    const sheet    = sheetMap.get(id) || { itemId: id, name: '', prices: [], sellPrices: [], image: null };
     const inv      = invMap.get(id)   || { itemId: id, currentStock: 0, inbound: 0 };
     const shortVel = velMap.get(id)   || { itemId: id, weeklySold: 0, isNew: false };
     const longVel  = longVelMap?.get(id);
@@ -3125,9 +3131,12 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
       isNew  = shortVel.isNew || false;
     }
 
-    const prices   = sheet.prices;
-    const minPrice = prices.length ? Math.min(...prices) : null;
-    const maxPrice = prices.length ? Math.max(...prices) : null;
+    const prices     = sheet.prices;
+    const minPrice   = prices.length ? Math.min(...prices) : null;
+    const maxPrice   = prices.length ? Math.max(...prices) : null;
+    const avgCost    = prices.length ? prices.reduce((s, p) => s + p, 0) / prices.length : null;
+    const sellPrices = sheet.sellPrices || [];
+    const avgSell    = sellPrices.length ? sellPrices.reduce((s, p) => s + p, 0) / sellPrices.length : null;
     const parLevel  = Math.ceil(weekly * weeksTarget);
     const onOrder   = inv.currentStock + inv.inbound;
     const suggestBuy = Math.max(0, parLevel - onOrder);
@@ -3149,6 +3158,8 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
       maxPrice,
       urgency,
       isNew,
+      avgCost,
+      avgSell,
       image: sheet.image || null,
     });
   });
@@ -3273,8 +3284,13 @@ function renderCard(item, delay = 0) {
         </div>
       </div>
       <div class="card-footer">
-        <span class="price-label">Typical buy price</span>
-        <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
+        ${item.avgCost && item.avgSell ? `
+          <div><div class="price-label">Avg Cost</div><div class="price-value">${fmtPrice(item.avgCost)}</div></div>
+          <div style="text-align:right"><div class="price-label">Avg Sell</div><div class="price-value">${fmtPrice(item.avgSell)}</div></div>
+        ` : `
+          <span class="price-label">Typical buy price</span>
+          <span class="price-value">${fmtPriceRange(item.minPrice, item.maxPrice)}</span>
+        `}
       </div>
       ${saleBadgeHtml(item.itemId)}
       ${manualSaleToggle(item.itemId, false)}
