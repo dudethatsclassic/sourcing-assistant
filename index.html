@@ -2177,7 +2177,6 @@ async function loadStoreData() {
     }
 
     const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, manualSales: cleanManualSales };
-    saveLocal();
     return result;
   } catch {
     const local = loadLocal();
@@ -4280,6 +4279,7 @@ async function generate(colMap = {}) {
     archivedIds  = new Set(storeData.archived);
     purchases    = storeData.purchases || {};
     manualSales  = storeData.manualSales || {};
+    saveLocal();
 
     // If no shipment CSVs uploaded this session, restore from cloud
     if (!shipNameMap.size && storeData.shipment && Object.keys(storeData.shipment).length) {
