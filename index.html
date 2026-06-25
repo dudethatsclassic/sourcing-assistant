@@ -2148,6 +2148,15 @@ async function loadStoreData() {
     const rawShipment = data.record?.shipment || {};
     const rawManualSales = data.record?.manualSales || {};
     const rawInboundOverrides = data.record?.inboundOverrides || {};
+    const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
+    const cleanInboundOverrides = {};
+    Object.entries(rawInboundOverrides).forEach(([id, val]) => {
+      if (typeof val === 'number') {
+        cleanInboundOverrides[id] = { value: val, ts: Date.now() }; // migrate old format
+      } else if (val?.ts && (Date.now() - val.ts) < SIXTY_DAYS) {
+        cleanInboundOverrides[id] = val;
+      }
+    });
 
     // Migrate old single-string tag format to array
     const tags = {};
@@ -2178,7 +2187,7 @@ async function loadStoreData() {
       return restored;
     }
 
-    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, manualSales: cleanManualSales, inboundOverrides: rawInboundOverrides };
+    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides };
     return result;
   } catch {
     const local = loadLocal();
@@ -3622,8 +3631,8 @@ function renderGrid(sortedItems) {
 function editInboundOverride(itemId) {
   const item = items.find(x => x.itemId === itemId);
   if (!item) return;
-  const currentDisplay = inboundOverrides[itemId] !== undefined ? inboundOverrides[itemId] : item.inbound;
-  const input = prompt(`Override inbound for "${item.name}"\nLeave blank to clear and restore CSV value:`, currentDisplay);
+  const currentDisplay = inboundOverrides[itemId] !== undefined ? inboundOverrides[itemId].value : item.inbound;
+  const input = prompt(`Override inbound for "${item.name}"\nLeave blank to clear and restore CSV value (auto-clears after 60 days):`, currentDisplay);
   if (input === null) return;
   if (input.trim() === '') {
     delete inboundOverrides[itemId];
@@ -3631,7 +3640,7 @@ function editInboundOverride(itemId) {
   } else {
     const val = parseInt(input, 10);
     if (isNaN(val) || val < 0) { toast('Enter a valid number (0 or more)', true); return; }
-    inboundOverrides[itemId] = val;
+    inboundOverrides[itemId] = { value: val, ts: Date.now() };
     item.inbound = val;
   }
   const onOrder = item.currentStock + item.inbound;
@@ -4317,7 +4326,7 @@ async function generate(colMap = {}) {
     items.forEach(item => {
       item._csvInbound = item.inbound; // preserve original so clearing override restores it
       if (inboundOverrides[item.itemId] !== undefined) {
-        item.inbound = inboundOverrides[item.itemId];
+        item.inbound = inboundOverrides[item.itemId].value;
         const onOrder = item.currentStock + item.inbound;
         item.suggestBuy = Math.max(0, item.parLevel - onOrder);
         if (item.currentStock === 0)              item.urgency = 'critical';
