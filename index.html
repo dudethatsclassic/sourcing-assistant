@@ -2870,6 +2870,7 @@ function parseWFSRows(rows, colMap = {}) {
   const idCol      = colMap.id      || findCol(s, WFS_ID_HINTS);
   const stockCol   = colMap.stock   || findCol(s, WFS_STOCK_HINTS);
   const inboundCol = colMap.inbound || findCol(s, WFS_INBOUND_HINTS);
+  const gtinCol    = findCol(s, ['gtin', 'upc', 'barcode', 'ean', 'upc_barcode']);
 
   // Surface ambiguity to user if we can't find stock/id
   if (!idCol || !stockCol) {
@@ -2884,6 +2885,7 @@ function parseWFSRows(rows, colMap = {}) {
       itemId: id,
       currentStock: Math.round(num(row[stockCol])),
       inbound: inboundCol ? Math.round(num(row[inboundCol])) : 0,
+      gtin: gtinCol ? (row[gtinCol] || '').trim() : '',
     });
   });
   return map;
@@ -3195,6 +3197,7 @@ function mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget) {
       avgCost,
       avgSell,
       avgProfit,
+      gtin: inv.gtin || '',
       image: sheet.image || null,
     });
   });
@@ -3302,7 +3305,7 @@ function renderCard(item, delay = 0) {
     </div>
     <div class="card-body">
       <div class="card-name">${escHtml(item.name)}</div>
-      <div class="card-id">${escHtml(item.itemId)}</div>
+      <div class="card-id">${escHtml(item.itemId)}${item.gtin ? ` · <span style="cursor:pointer" title="Click to copy GTIN" onclick="navigator.clipboard.writeText('${escHtml(item.gtin)}');toast('GTIN copied')">GTIN: ${escHtml(item.gtin)}</span>` : ''}</div>
       <div class="stats-grid">
         <div class="stat-box">
           <div class="stat-box-label">In Stock</div>
