@@ -2156,11 +2156,12 @@ function loadLocal() {
   } catch (_) { return null; }
 }
 
-async function loadStoreData() {
+async function loadStoreData(attempt = 0) {
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
       headers: { 'X-Master-Key': JSONBIN_KEY }
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const rawTags = data.record?.tags || {};
     const rawArchived = data.record?.archived || [];
@@ -2210,7 +2211,14 @@ async function loadStoreData() {
     const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides };
     return result;
   } catch {
+    if (attempt === 0) {
+      await new Promise(r => setTimeout(r, 1200));
+      return loadStoreData(1);
+    }
     const local = loadLocal();
+    if (local?.tags && Object.keys(local.tags).length) {
+      toast('JSONBin unavailable — loaded from local backup', true);
+    }
     return { tags: local?.tags || {}, archived: local?.archived || [], purchases: local?.purchases || {}, shipment: local?.shipment || {}, manualSales: local?.manualSales || {}, inboundOverrides: local?.inboundOverrides || {} };
   }
 }
