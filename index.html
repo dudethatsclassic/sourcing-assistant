@@ -2091,6 +2091,202 @@
     }
     .wl-clear-btn:hover { border-color: var(--red); color: var(--red); }
 
+    .wl-build-btn {
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid var(--accent);
+      background: transparent;
+      color: var(--accent);
+      font-family: inherit;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .wl-note-input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: inherit;
+      outline: none;
+      padding: 0;
+      margin-top: 3px;
+      font-style: italic;
+    }
+    .wl-note-input::placeholder { color: var(--border); }
+    .wl-note-input:focus { color: var(--text); }
+    .wl-build-cta-btn {
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-family: inherit;
+    }
+
+    /* ── Build from Sales overlay ── */
+    .build-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 350;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .build-overlay.open { transform: translateY(0); }
+    .build-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-light);
+      background: var(--surface);
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .build-title { flex: 1; font-size: 16px; font-weight: 700; text-align: center; }
+    .build-cancel-btn {
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .build-confirm-btn {
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .build-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .build-empty {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .build-group { margin-bottom: 4px; }
+    .build-store-name {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 10px 16px 6px;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 1;
+    }
+    .build-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-light);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .build-item.selected { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .build-check {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      transition: all 0.15s;
+      color: transparent;
+    }
+    .build-check.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .build-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .build-thumb-ph {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      background: var(--surface);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .build-item-info { flex: 1; min-width: 0; overflow: hidden; }
+    .build-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .build-item-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .build-note-input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: inherit;
+      outline: none;
+      padding: 0;
+      margin-top: 4px;
+      font-style: italic;
+    }
+    .build-note-input::placeholder { color: var(--border); }
+    .build-note-input:focus { color: var(--text); }
+    .build-stepper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .build-step-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      font-size: 15px;
+      cursor: pointer;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-weight: 500;
+      line-height: 1;
+    }
+    .build-step-val { font-size: 13px; font-weight: 600; min-width: 20px; text-align: center; }
+
     .wl-sale-btn {
       display: inline-flex;
       align-items: center;
@@ -2243,11 +2439,22 @@
 </main>
 
 <!-- ── Weekly List Modal ── -->
+<!-- ── Build from Sales overlay ── -->
+<div class="build-overlay" id="buildOverlay">
+  <div class="build-header">
+    <button class="build-cancel-btn" onclick="closeBuildFromSales()">Cancel</button>
+    <div class="build-title">📅 This Week's Sales</div>
+    <button class="build-confirm-btn" id="buildConfirmBtn" onclick="confirmBuildFromSales()">Add 0</button>
+  </div>
+  <div class="build-body" id="buildBody"></div>
+</div>
+
 <div class="weekly-list-overlay" id="weeklyListOverlay" onclick="closeWeeklyList()">
   <div class="weekly-list-panel" onclick="event.stopPropagation()">
     <div class="weekly-list-header">
       <div class="weekly-list-title">📋 Weekly List</div>
       <div class="wl-header-actions">
+        <button class="wl-build-btn" onclick="openBuildFromSales()">📅 From Sales</button>
         <button class="wl-copy-btn" onclick="copyWeeklyList()">Copy</button>
         <button class="wl-done-btn" onclick="closeWeeklyList()">Done</button>
       </div>
@@ -2991,8 +3198,11 @@ let buyingItemId = null;     // item being marked in buy sheet
 let saleMap      = {};       // { itemId: [{ store, saleName, price }] }
 let manualSales  = {};       // { itemId: expiresMs } — manually flagged on sale (7-day expiry)
 let inboundOverrides = {};   // { itemId: number } — manual inbound count overrides
-let weeklyList   = {};       // { itemId: { addedTs } } — this week's buy list
+let weeklyList   = {};       // { itemId: { addedTs, note?, qty? } } — this week's buy list
 let wlQtys       = {};       // { itemId: qty } — pending qty adjustments in weekly list modal
+let _buildSelected = new Set(); // itemIds checked in Build from Sales view
+let _buildQtys     = {};        // { itemId: qty } — qty edits inside build view
+let _buildNotes    = {};        // { itemId: note } — note edits inside build view
 let shoppingQtys = {};       // { itemId: qty } — pending qty adjustments in shopping mode
 let editingItemId = null; // item being tagged
 
@@ -4455,7 +4665,13 @@ function renderWeeklyListModal() {
   const body = $('weeklyListBody');
   const listedIds = Object.keys(weeklyList);
   if (!listedIds.length) {
-    body.innerHTML = '<div class="wl-empty">No items on this week\'s list yet.<br>Tap "+ Weekly" on any item to add it.</div>';
+    body.innerHTML = `<div class="wl-empty" style="color:var(--text)">
+      <div style="font-size:36px;margin-bottom:10px">📅</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:6px">Build from this week's sales</div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:20px">The app already knows what's on sale —<br>tap to see a ready-made checklist.</div>
+      <button class="wl-build-cta-btn" onclick="openBuildFromSales()">Build from Sales</button>
+      <div style="margin-top:16px;color:var(--muted);font-size:12px">Or tap + Weekly on any card to add manually.</div>
+    </div>`;
     return;
   }
 
@@ -4492,7 +4708,8 @@ function renderWeeklyListModal() {
 function wlItemHtml(item, store) {
   const addedTs  = weeklyList[item.itemId]?.addedTs || 0;
   const isBought = !!(purchases[item.itemId]?.ts > addedTs);
-  const qty = wlQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
+  const qty = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
+  const note = weeklyList[item.itemId]?.note || '';
 
   const isNoneGroup  = store === '__none__';
   const hasAutoSale  = isNoneGroup
@@ -4521,6 +4738,7 @@ function wlItemHtml(item, store) {
       <div class="wl-item-info">
         <div class="wl-item-name">${escHtml(item.name)}</div>
         <div class="wl-item-sub">${urgHtml}${autoSaleHtml}${manualSaleHtml}</div>
+        <input class="wl-note-input" placeholder="Add note…" value="${escHtml(note)}" oninput="updateWLNote('${escHtml(item.itemId)}', this.value)" onclick="event.stopPropagation()">
       </div>
       <div class="wl-stepper">
         <button class="wl-step-btn" onclick="adjustWLQty('${escHtml(item.itemId)}', -1)">−</button>
@@ -4536,7 +4754,7 @@ function toggleWLItem(itemId) {
   if (purchases[itemId]) {
     delete purchases[itemId];
   } else {
-    const qty = wlQtys[itemId] ?? (item?.suggestBuy || 1);
+    const qty = wlQtys[itemId] ?? weeklyList[itemId]?.qty ?? (item?.suggestBuy || 1);
     purchases[itemId] = { qty, ts: Date.now() };
   }
   saveLocal();
@@ -4559,16 +4777,17 @@ function toggleWLItem(itemId) {
 
 function adjustWLQty(itemId, delta) {
   const item = items.find(x => x.itemId === itemId);
-  const current = wlQtys[itemId] ?? (purchases[itemId]?.qty || item?.suggestBuy || 1);
+  const current = wlQtys[itemId] ?? weeklyList[itemId]?.qty ?? (purchases[itemId]?.qty || item?.suggestBuy || 1);
   const newQty = Math.max(1, current + delta);
   wlQtys[itemId] = newQty;
+  if (weeklyList[itemId]) weeklyList[itemId] = { ...weeklyList[itemId], qty: newQty };
   document.querySelectorAll(`[data-qty-id="${CSS.escape(itemId)}"]`).forEach(el => { el.textContent = newQty; });
   if (purchases[itemId]) {
     purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
-    saveLocal();
-    saveStoreData_raw(currentPayload());
     refreshPurchaseUI(itemId);
   }
+  saveLocal();
+  saveStoreData_raw(currentPayload());
 }
 
 function toggleWLSale(itemId, store) {
@@ -4658,10 +4877,12 @@ function copyWeeklyList() {
   storeNames.forEach(store => {
     lines.push((store === NONE ? 'No Store Tag' : store).toUpperCase());
     groups[store].forEach(item => {
-      const check = purchases[item.itemId] ? '[x]' : '[ ]';
-      const qty   = wlQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
-      const sale  = (saleMap[item.itemId]?.length || manualSales[item.itemId]) ? ' (sale)' : '';
-      lines.push(`${check} ${item.name} x${qty}${sale}`);
+      const addedTs = weeklyList[item.itemId]?.addedTs || 0;
+      const check = (purchases[item.itemId]?.ts > addedTs) ? '[x]' : '[ ]';
+      const qty   = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
+      const sale  = (saleMap[item.itemId]?.length || manualSales[item.itemId]) ? ' 🏷️' : '';
+      const note  = weeklyList[item.itemId]?.note ? ` — ${weeklyList[item.itemId].note}` : '';
+      lines.push(`${check} ${item.name} x${qty}${sale}${note}`);
     });
     lines.push('');
   });
@@ -4669,6 +4890,191 @@ function copyWeeklyList() {
   navigator.clipboard.writeText(lines.join('\n').trimEnd())
     .then(() => toast('Weekly list copied!'))
     .catch(() => toast('Copy failed', true));
+}
+
+function updateWLNote(itemId, note) {
+  if (!weeklyList[itemId]) return;
+  weeklyList[itemId] = { ...weeklyList[itemId], note };
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+}
+
+// ── Build from Sales ──────────────────────────────────────────────────────────
+
+function buildSalesGrouped() {
+  const groups = {}; // { storeName: [{ item, saleDesc, isAuto }] }
+
+  Object.entries(saleMap).forEach(([itemId, sales]) => {
+    if (!Array.isArray(sales)) return;
+    const item = items.find(x => x.itemId === itemId);
+    if (!item || archivedIds.has(itemId)) return;
+    sales.forEach(sale => {
+      const store = sale.store || 'Unknown';
+      if (!groups[store]) groups[store] = [];
+      if (!groups[store].find(x => x.item.itemId === itemId)) {
+        const desc = sale.price ? sale.price : (sale.saleName || sale.description || 'On Sale');
+        groups[store].push({ item, saleDesc: desc, isAuto: true });
+      }
+    });
+  });
+
+  Object.entries(manualSales).forEach(([itemId, ms]) => {
+    if (ms.expiresMs < Date.now()) return;
+    const item = items.find(x => x.itemId === itemId);
+    if (!item || archivedIds.has(itemId)) return;
+    const stores = ms.stores?.length ? ms.stores : ['Manual'];
+    stores.forEach(store => {
+      if (!groups[store]) groups[store] = [];
+      if (!groups[store].find(x => x.item.itemId === itemId)) {
+        groups[store].push({ item, saleDesc: 'Manual sale', isAuto: false });
+      }
+    });
+  });
+
+  return groups;
+}
+
+function openBuildFromSales() {
+  const groups = buildSalesGrouped();
+  const totalItems = Object.values(groups).reduce((n, g) => n + g.length, 0);
+
+  if (!totalItems) {
+    toast('No sales detected — generate your list first to check for sales', true);
+    return;
+  }
+
+  _buildSelected = new Set(Object.keys(weeklyList));
+  _buildQtys = {};
+  _buildNotes = {};
+  Object.entries(weeklyList).forEach(([itemId, wl]) => {
+    if (wl.note) _buildNotes[itemId] = wl.note;
+    if (wl.qty)  _buildQtys[itemId]  = wl.qty;
+  });
+
+  // Weekly list stays open behind — build overlay (z:350) covers it
+  if (!$('weeklyListOverlay').classList.contains('open')) openWeeklyList();
+  renderBuildFromSales(groups);
+  $('buildOverlay').classList.add('open');
+}
+
+function closeBuildFromSales() {
+  $('buildOverlay').classList.remove('open');
+  // Weekly list is still open behind — nothing else needed
+}
+
+function renderBuildFromSales(groups) {
+  const storeNames = Object.keys(groups).sort();
+  let html = '';
+
+  storeNames.forEach(store => {
+    html += `<div class="build-group"><div class="build-store-name">${escHtml(store)}</div>`;
+    groups[store].forEach(({ item, saleDesc, isAuto }) => {
+      const itemId = item.itemId;
+      const selected = _buildSelected.has(itemId);
+      const qty = _buildQtys[itemId] ?? weeklyList[itemId]?.qty ?? item.suggestBuy ?? 1;
+      const note = _buildNotes[itemId] ?? weeklyList[itemId]?.note ?? '';
+
+      const urgHtml = item.urgency === 'critical'
+        ? `<span style="color:var(--red);font-size:10px">Out of Stock</span>`
+        : item.urgency === 'low'
+          ? `<span style="color:var(--orange);font-size:10px">Running Low</span>` : '';
+      const saleHtml = `<span style="color:var(--green);font-size:11px;font-weight:600">🏷️ ${escHtml(String(saleDesc))}</span>`;
+
+      const thumbHtml = item.image
+        ? `<img class="build-thumb" src="${escHtml(item.image)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="build-thumb-ph" style="display:none">📦</div>`
+        : `<div class="build-thumb-ph">📦</div>`;
+
+      html += `
+        <div class="build-item${selected ? ' selected' : ''}" data-build-id="${escHtml(itemId)}" onclick="toggleBuildItem('${escHtml(itemId)}')">
+          <div class="build-check${selected ? ' checked' : ''}">${selected ? '✓' : ''}</div>
+          ${thumbHtml}
+          <div class="build-item-info">
+            <div class="build-item-name">${escHtml(item.name)}</div>
+            <div class="build-item-sub">${saleHtml}${urgHtml ? ' · ' + urgHtml : ''}</div>
+            <input class="build-note-input" placeholder="B2G2, Nov on, limit…" value="${escHtml(note)}"
+              onclick="event.stopPropagation()"
+              oninput="updateBuildNote('${escHtml(itemId)}', this.value)">
+          </div>
+          <div class="build-stepper">
+            <button class="build-step-btn" onclick="event.stopPropagation();adjustBuildQty('${escHtml(itemId)}',-1)">−</button>
+            <span class="build-step-val" id="bq-${escHtml(itemId)}">${qty}</span>
+            <button class="build-step-btn" onclick="event.stopPropagation();adjustBuildQty('${escHtml(itemId)}',1)">+</button>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  });
+
+  $('buildBody').innerHTML = html;
+  updateBuildConfirmBtn();
+}
+
+function toggleBuildItem(itemId) {
+  if (_buildSelected.has(itemId)) {
+    _buildSelected.delete(itemId);
+  } else {
+    _buildSelected.add(itemId);
+  }
+  const sel = _buildSelected.has(itemId);
+  const row = document.querySelector(`.build-item[data-build-id="${CSS.escape(itemId)}"]`);
+  if (row) {
+    row.classList.toggle('selected', sel);
+    const check = row.querySelector('.build-check');
+    if (check) { check.classList.toggle('checked', sel); check.textContent = sel ? '✓' : ''; }
+  }
+  updateBuildConfirmBtn();
+}
+
+function updateBuildNote(itemId, note) {
+  _buildNotes[itemId] = note;
+}
+
+function adjustBuildQty(itemId, delta) {
+  const item = items.find(x => x.itemId === itemId);
+  const current = _buildQtys[itemId] ?? weeklyList[itemId]?.qty ?? item?.suggestBuy ?? 1;
+  _buildQtys[itemId] = Math.max(1, current + delta);
+  const el = document.getElementById(`bq-${itemId}`);
+  if (el) el.textContent = _buildQtys[itemId];
+  // Auto-select item when qty is adjusted
+  if (!_buildSelected.has(itemId)) {
+    _buildSelected.add(itemId);
+    const row = document.querySelector(`.build-item[data-build-id="${CSS.escape(itemId)}"]`);
+    if (row) {
+      row.classList.add('selected');
+      const check = row.querySelector('.build-check');
+      if (check) { check.classList.add('checked'); check.textContent = '✓'; }
+    }
+    updateBuildConfirmBtn();
+  }
+}
+
+function updateBuildConfirmBtn() {
+  const btn = $('buildConfirmBtn');
+  if (!btn) return;
+  const count = _buildSelected.size;
+  btn.textContent = count > 0 ? `Add ${count}` : 'Add';
+  btn.style.opacity = count === 0 ? '0.5' : '1';
+}
+
+function confirmBuildFromSales() {
+  if (!_buildSelected.size) return;
+  const now = Date.now();
+  _buildSelected.forEach(itemId => {
+    const existing = weeklyList[itemId];
+    weeklyList[itemId] = {
+      addedTs: existing?.addedTs || now,
+      note: _buildNotes[itemId] ?? existing?.note ?? '',
+      qty: _buildQtys[itemId] ?? existing?.qty
+    };
+    if (_buildQtys[itemId]) wlQtys[itemId] = _buildQtys[itemId];
+  });
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+  renderWeeklyListBtn();
+  renderWeeklyListModal(); // refresh the list that's open behind the build overlay
+  const count = _buildSelected.size;
+  closeBuildFromSales(); // slide build overlay away — weekly list is visible behind it
+  toast(`${count} item${count !== 1 ? 's' : ''} added to weekly list`);
 }
 
 // ─── Store Sheet ──────────────────────────────────────────────────────────────
