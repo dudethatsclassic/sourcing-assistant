@@ -288,43 +288,46 @@
 
     /* ── Summary Bar ── */
     .summary-bar {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 20px;
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 2px;
     }
-
-    @media (max-width: 480px) {
-      .summary-bar { grid-template-columns: 1fr 1fr; }
-    }
+    .summary-bar::-webkit-scrollbar { display: none; }
 
     .stat-pill {
       background: var(--surface);
       border-radius: var(--r-sm);
       border: 1px solid var(--border-light);
       box-shadow: var(--shadow-xs);
-      padding: 16px 18px;
+      padding: 10px 14px;
       cursor: pointer;
       transition: border-color 0.15s, box-shadow 0.15s;
       user-select: none;
+      flex-shrink: 0;
     }
     .stat-pill:hover { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent); }
     .stat-pill.active { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
 
     .stat-pill-label {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--muted-light);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      font-weight: 500;
-      margin-bottom: 6px;
+      font-weight: 600;
+      margin-bottom: 3px;
+      white-space: nowrap;
     }
 
     .stat-pill-value {
-      font-size: 28px;
+      font-size: 22px;
       font-weight: 700;
-      letter-spacing: -1px;
+      letter-spacing: -0.5px;
       line-height: 1;
+      white-space: nowrap;
     }
 
     /* ── Toolbar ── */
@@ -942,6 +945,42 @@
     .settings-btn:hover { border-color: var(--muted-light); color: var(--text); }
     .settings-btn.configured { border-color: rgba(26,158,69,0.3); color: var(--green); background: var(--green-dim); }
 
+    .wl-toolbar-btn {
+      position: relative;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .wl-toolbar-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .wl-toolbar-btn.has-items { border-color: var(--accent-dim2); color: var(--accent); background: var(--accent-dim); }
+    .wl-toolbar-badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      min-width: 14px;
+      height: 14px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 3px;
+      line-height: 1;
+    }
+
     /* ── Settings modal ── */
     .settings-backdrop {
       position: fixed; inset: 0;
@@ -1090,9 +1129,14 @@
     .store-filters {
       display: flex;
       gap: 6px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 12px;
+      padding-bottom: 2px;
     }
+    .store-filters::-webkit-scrollbar { display: none; }
 
     .filter-chip {
       display: inline-flex;
@@ -2147,7 +2191,7 @@
         <div class="section-title" id="sectionTitle"></div>
         <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
         <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
-        <button class="archived-toggle" id="weeklyListBtn" onclick="openWeeklyList()" style="display:none"></button>
+        <button class="wl-toolbar-btn" id="weeklyListBtn" onclick="openWeeklyList()" title="Weekly List">📋<span class="wl-toolbar-badge" id="weeklyListBadge"></span></button>
         <button class="settings-btn" id="settingsBtn" onclick="openSettings()" title="API Settings">⚙️</button>
       </div>
       <div class="toolbar-bottom">
@@ -3198,7 +3242,7 @@ function parseWFSRows(rows, colMap = {}) {
       itemId: id,
       currentStock: Math.round(num(row[stockCol])),
       inbound: inboundCol ? Math.round(num(row[inboundCol])) : 0,
-      gtin: gtinCol ? (row[gtinCol] || '').trim() : '',
+      gtin: gtinCol ? (row[gtinCol] || '').trim().replace(/^="?(.*?)"?$/, '$1') : '',
     });
   });
   return map;
@@ -4338,11 +4382,12 @@ function copyShoppingList() {
 // ─── Weekly List ─────────────────────────────────────────────────────────────
 function renderWeeklyListBtn() {
   const el = $('weeklyListBtn');
+  const badge = $('weeklyListBadge');
   if (!el) return;
   const count = Object.keys(weeklyList).length;
-  if (count === 0) { el.style.display = 'none'; return; }
-  el.style.display = 'inline-flex';
-  el.textContent = `📋 Weekly List (${count})`;
+  el.style.display = count > 0 ? 'inline-flex' : 'none';
+  el.classList.toggle('has-items', count > 0);
+  if (badge) badge.textContent = count > 0 ? count : '';
 }
 
 function weeklyListAddBtnHtml(itemId, isList = false) {
@@ -4666,7 +4711,7 @@ function renderSummary(all) {
   const boughtLow      = low.filter(x => purchases[x.itemId]).length;
 
   const boughtBadge = n => n > 0
-    ? `<span style="font-size:13px;font-weight:500;color:var(--green);margin-left:4px">(${n} bought)</span>`
+    ? `<div style="font-size:10px;font-weight:600;color:var(--green);margin-top:3px">${n} bought</div>`
     : '';
 
   $('summaryBar').innerHTML = `
