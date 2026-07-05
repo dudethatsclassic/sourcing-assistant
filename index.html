@@ -4470,7 +4470,8 @@ function renderWeeklyListModal() {
 }
 
 function wlItemHtml(item, store) {
-  const isBought = !!purchases[item.itemId];
+  const addedTs  = weeklyList[item.itemId]?.addedTs || 0;
+  const isBought = !!(purchases[item.itemId]?.ts > addedTs);
   const qty = wlQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
   const hasSale = store === '__none__'
     ? (saleMap[item.itemId]?.length > 0 || !!manualSales[item.itemId])
@@ -4510,7 +4511,8 @@ function toggleWLItem(itemId) {
   saveLocal();
   saveStoreData_raw(currentPayload());
 
-  const isBought = !!purchases[itemId];
+  const addedTs  = weeklyList[itemId]?.addedTs || 0;
+  const isBought = !!(purchases[itemId]?.ts > addedTs);
   document.querySelectorAll(`[data-wl-id="${CSS.escape(itemId)}"]`).forEach(row => {
     row.classList.toggle('is-done', isBought);
     const check = row.querySelector('.wl-check');
