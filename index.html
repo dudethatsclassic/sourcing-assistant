@@ -4681,11 +4681,13 @@ function renderWeeklyListModal() {
     const item = items.find(x => x.itemId === itemId);
     if (!item) return;
     const stores = storeTags[itemId] || [];
+    const excluded = weeklyList[itemId]?.excludedStores || [];
     if (!stores.length) {
       if (!groups[NONE]) groups[NONE] = [];
       groups[NONE].push(item);
     } else {
       stores.forEach(store => {
+        if (excluded.includes(store)) return;
         if (!groups[store]) groups[store] = [];
         groups[store].push(item);
       });
@@ -4723,7 +4725,7 @@ function wlItemHtml(item, store) {
   const autoSaleHtml   = hasAutoSale
     ? `<span style="color:var(--green);font-weight:600;font-size:11px">🏷️ On Sale</span>` : '';
   const manualSaleHtml = hasAutoSale ? '' // don't show manual toggle when auto already shows it
-    : `<button class="wl-sale-btn${hasManualSale ? ' on-sale' : ''}" onclick="event.stopPropagation();toggleWLSale('${escHtml(item.itemId)}','${escHtml(store)}')">${hasManualSale ? '🏷️ On Sale' : '🏷️ Add sale'}</button>`;
+    : `<button class="wl-sale-btn${hasManualSale ? ' on-sale' : ''}" onclick="event.stopPropagation();handleWLSaleToggle(this)">${hasManualSale ? '🏷️ On Sale' : '🏷️ Add sale'}</button>`;
 
   const urgHtml = item.urgency === 'critical' ? `<span style="color:var(--red);font-size:11px">Out of Stock</span>`
                 : item.urgency === 'low'      ? `<span style="color:var(--orange);font-size:11px">Running Low</span>` : '';
@@ -4732,7 +4734,7 @@ function wlItemHtml(item, store) {
     : `<div class="wl-thumb-placeholder">📦</div>`;
 
   return `
-    <div class="wl-item${isBought ? ' is-done' : ''}" data-wl-id="${escHtml(item.itemId)}">
+    <div class="wl-item${isBought ? ' is-done' : ''}" data-wl-id="${escHtml(item.itemId)}" data-wl-store="${escHtml(store)}">
       <div class="wl-check${isBought ? ' checked' : ''}" onclick="toggleWLItem('${escHtml(item.itemId)}')">${isBought ? '✓' : ''}</div>
       ${thumbHtml}
       <div class="wl-item-info">
@@ -4745,7 +4747,7 @@ function wlItemHtml(item, store) {
         <span class="wl-step-val" data-qty-id="${escHtml(item.itemId)}">${qty}</span>
         <button class="wl-step-btn" onclick="adjustWLQty('${escHtml(item.itemId)}', 1)">+</button>
       </div>
-      <button class="wl-remove-btn" onclick="removeFromWeeklyList('${escHtml(item.itemId)}')" title="Remove from list">✕</button>
+      <button class="wl-remove-btn" onclick="handleWLRemove(this)" title="${store === '__none__' ? 'Remove from list' : 'Remove from ' + escHtml(store)}">✕</button>
     </div>`;
 }
 
@@ -4831,6 +4833,43 @@ function removeFromWeeklyList(itemId) {
   if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
   const row = document.querySelector(`.list-row[data-id="${CSS.escape(itemId)}"]`);
   if (row) { const btn = row.querySelector('.list-weekly-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, true); }
+}
+
+function handleWLRemove(btn) {
+  const row = btn.closest('.wl-item');
+  const itemId = row.dataset.wlId;
+  const store = row.dataset.wlStore;
+  if (!store || store === '__none__') removeFromWeeklyList(itemId);
+  else excludeFromStore(itemId, store);
+}
+
+function handleWLSaleToggle(btn) {
+  const row = btn.closest('.wl-item');
+  toggleWLSale(row.dataset.wlId, row.dataset.wlStore || '__none__');
+}
+
+function excludeFromStore(itemId, store) {
+  if (!weeklyList[itemId]) return;
+  const current = weeklyList[itemId].excludedStores || [];
+  if (current.includes(store)) return;
+  weeklyList[itemId] = { ...weeklyList[itemId], excludedStores: [...current, store] };
+
+  // If all tagged stores are now excluded, remove the item entirely
+  const allStores = storeTags[itemId] || [];
+  const nowExcluded = weeklyList[itemId].excludedStores;
+  const remaining = allStores.filter(s => !nowExcluded.includes(s));
+  if (!remaining.length) {
+    delete weeklyList[itemId];
+    const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
+    if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
+    const row = document.querySelector(`.list-row[data-id="${CSS.escape(itemId)}"]`);
+    if (row) { const btn = row.querySelector('.list-weekly-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, true); }
+  }
+
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+  renderWeeklyListBtn();
+  renderWeeklyListModal();
 }
 
 function clearWeeklyList() {
