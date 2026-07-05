@@ -2090,6 +2090,26 @@
       transition: all 0.15s;
     }
     .wl-clear-btn:hover { border-color: var(--red); color: var(--red); }
+
+    .wl-sale-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--muted-light);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      font-family: inherit;
+      line-height: 1.4;
+    }
+    .wl-sale-btn:hover { border-color: var(--green); color: var(--green); }
+    .wl-sale-btn.on-sale { border-color: rgba(26,158,69,0.4); background: var(--green-dim); color: var(--green); }
   </style>
 </head>
 <body>
@@ -4473,12 +4493,23 @@ function wlItemHtml(item, store) {
   const addedTs  = weeklyList[item.itemId]?.addedTs || 0;
   const isBought = !!(purchases[item.itemId]?.ts > addedTs);
   const qty = wlQtys[item.itemId] ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
-  const hasSale = store === '__none__'
-    ? (saleMap[item.itemId]?.length > 0 || !!manualSales[item.itemId])
-    : (saleMap[item.itemId]?.some(s => s.store === store) || isManualSaleAt(item.itemId, store));
-  const saleHtml  = hasSale ? `<span style="color:var(--green);font-weight:600">🏷️ On Sale</span>` : '';
-  const urgHtml   = item.urgency === 'critical' ? `<span style="color:var(--red)">Out of Stock</span>`
-                  : item.urgency === 'low'      ? `<span style="color:var(--orange)">Running Low</span>` : '';
+
+  const isNoneGroup  = store === '__none__';
+  const hasAutoSale  = isNoneGroup
+    ? saleMap[item.itemId]?.length > 0
+    : saleMap[item.itemId]?.some(s => s.store === store);
+  const hasManualSale = isNoneGroup
+    ? !!manualSales[item.itemId]
+    : isManualSaleAt(item.itemId, store);
+
+  // Auto-detected: read-only badge. Manual: toggleable button.
+  const autoSaleHtml   = hasAutoSale
+    ? `<span style="color:var(--green);font-weight:600;font-size:11px">🏷️ On Sale</span>` : '';
+  const manualSaleHtml = hasAutoSale ? '' // don't show manual toggle when auto already shows it
+    : `<button class="wl-sale-btn${hasManualSale ? ' on-sale' : ''}" onclick="event.stopPropagation();toggleWLSale('${escHtml(item.itemId)}','${escHtml(store)}')">${hasManualSale ? '🏷️ On Sale' : '🏷️ Add sale'}</button>`;
+
+  const urgHtml = item.urgency === 'critical' ? `<span style="color:var(--red);font-size:11px">Out of Stock</span>`
+                : item.urgency === 'low'      ? `<span style="color:var(--orange);font-size:11px">Running Low</span>` : '';
   const thumbHtml = item.image
     ? `<img class="wl-thumb" src="${escHtml(item.image)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="wl-thumb-placeholder" style="display:none">📦</div>`
     : `<div class="wl-thumb-placeholder">📦</div>`;
@@ -4489,7 +4520,7 @@ function wlItemHtml(item, store) {
       ${thumbHtml}
       <div class="wl-item-info">
         <div class="wl-item-name">${escHtml(item.name)}</div>
-        <div class="wl-item-sub">${urgHtml}${saleHtml}</div>
+        <div class="wl-item-sub">${urgHtml}${autoSaleHtml}${manualSaleHtml}</div>
       </div>
       <div class="wl-stepper">
         <button class="wl-step-btn" onclick="adjustWLQty('${escHtml(item.itemId)}', -1)">−</button>
@@ -4538,6 +4569,37 @@ function adjustWLQty(itemId, delta) {
     saveStoreData_raw(currentPayload());
     refreshPurchaseUI(itemId);
   }
+}
+
+function toggleWLSale(itemId, store) {
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  const ms = manualSales[itemId];
+  const isNoneGroup = store === '__none__';
+
+  if (!ms) {
+    manualSales[itemId] = { stores: isNoneGroup ? [] : [store], expiresMs: Date.now() + SEVEN_DAYS };
+  } else {
+    const currentStores = ms.stores || [];
+    const isOnSaleHere  = isNoneGroup ? currentStores.length === 0 : currentStores.includes(store);
+    if (isOnSaleHere) {
+      if (isNoneGroup || currentStores.length <= 1) {
+        delete manualSales[itemId];
+      } else {
+        manualSales[itemId] = { stores: currentStores.filter(s => s !== store), expiresMs: ms.expiresMs };
+      }
+    } else {
+      manualSales[itemId] = {
+        stores: isNoneGroup ? [] : [...currentStores, store],
+        expiresMs: Date.now() + SEVEN_DAYS
+      };
+    }
+  }
+
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+  renderWeeklyListModal();
+  renderFilterChips();
+  renderGrid(sortItems(items, $('sortSelect').value));
 }
 
 function removeFromWeeklyList(itemId) {
