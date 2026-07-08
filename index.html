@@ -4353,11 +4353,17 @@ function confirmPurchase() {
   const qty = parseInt($('buyQtyInput').value, 10);
   if (!qty || qty < 1) return;
   purchases[buyingItemId] = { qty, ts: Date.now() };
+  // Sync qty back to weekly list so the stepper matches
+  if (weeklyList[buyingItemId]) {
+    wlQtys[buyingItemId] = qty;
+    weeklyList[buyingItemId] = { ...weeklyList[buyingItemId], qty };
+  }
   saveLocal();
   saveStoreData_raw(currentPayload());
   refreshPurchaseUI(buyingItemId);
   renderClearBoughtBtn();
   renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
+  if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
   closeBuySheet();
   toast(`✓ Bought ${qty} marked`);
 }
@@ -4370,6 +4376,7 @@ function unmarkPurchase() {
   refreshPurchaseUI(buyingItemId);
   renderClearBoughtBtn();
   renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
+  if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
   closeBuySheet();
   toast('Purchase unmarked');
 }
