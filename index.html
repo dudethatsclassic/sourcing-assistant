@@ -4784,10 +4784,24 @@ function adjustWLQty(itemId, delta) {
   wlQtys[itemId] = newQty;
   if (weeklyList[itemId]) weeklyList[itemId] = { ...weeklyList[itemId], qty: newQty };
   document.querySelectorAll(`[data-qty-id="${CSS.escape(itemId)}"]`).forEach(el => { el.textContent = newQty; });
-  if (purchases[itemId]) {
-    purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
-    refreshPurchaseUI(itemId);
-  }
+
+  // Adjusting qty while shopping means "I'm getting this many" — always sync to purchases
+  purchases[itemId] = { qty: newQty, ts: purchases[itemId]?.ts || Date.now() };
+
+  // Reflect the check state in the weekly list row
+  const addedTs = weeklyList[itemId]?.addedTs || 0;
+  const isBought = purchases[itemId].ts > addedTs;
+  document.querySelectorAll(`[data-wl-id="${CSS.escape(itemId)}"]`).forEach(row => {
+    row.classList.toggle('is-done', isBought);
+    const check = row.querySelector('.wl-check');
+    if (check) { check.classList.toggle('checked', isBought); check.textContent = isBought ? '✓' : ''; }
+  });
+
+  refreshPurchaseUI(itemId);
+  renderClearBoughtBtn();
+  renderSummary(activeFilter && activeFilter !== '__sale__'
+    ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
+    : items);
   saveLocal();
   saveStoreData_raw(currentPayload());
 }
