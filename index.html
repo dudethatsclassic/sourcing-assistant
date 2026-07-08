@@ -4653,7 +4653,8 @@ function toggleWeeklyList(itemId) {
   if (weeklyList[itemId]) {
     delete weeklyList[itemId];
   } else {
-    weeklyList[itemId] = { addedTs: Date.now() };
+    const item = items.find(x => x.itemId === itemId);
+    weeklyList[itemId] = { addedTs: Date.now(), name: item?.name, urgency: item?.urgency };
   }
   saveLocal();
   saveStoreData_raw(currentPayload());
@@ -4674,6 +4675,18 @@ function toggleWeeklyList(itemId) {
 
 function openWeeklyList() {
   wlQtys = {};
+  // Backfill name/urgency for any entries added before this was stored
+  let backfilled = false;
+  Object.keys(weeklyList).forEach(itemId => {
+    if (!weeklyList[itemId]?.name) {
+      const item = items.find(x => x.itemId === itemId);
+      if (item) {
+        weeklyList[itemId] = { ...weeklyList[itemId], name: item.name, urgency: item.urgency };
+        backfilled = true;
+      }
+    }
+  });
+  if (backfilled) { saveLocal(); saveStoreData_raw(currentPayload()); }
   renderWeeklyListModal();
   $('weeklyListOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -4701,8 +4714,12 @@ function renderWeeklyListModal() {
   const NONE = '__none__';
   const groups = {};
   listedIds.forEach(itemId => {
-    const item = items.find(x => x.itemId === itemId);
-    if (!item) return;
+    const wlMeta = weeklyList[itemId];
+    let item = items.find(x => x.itemId === itemId);
+    if (!item) {
+      if (!wlMeta?.name) return; // no stored name — can't display
+      item = { itemId, name: wlMeta.name, urgency: wlMeta.urgency || 'ok', suggestBuy: wlMeta.qty || 1, image: null };
+    }
     const stores = storeTags[itemId] || [];
     const excluded = weeklyList[itemId]?.excludedStores || [];
     if (!stores.length) {
@@ -5163,10 +5180,13 @@ function confirmBuildFromSales() {
   const now = Date.now();
   _buildSelected.forEach(itemId => {
     const existing = weeklyList[itemId];
+    const item = items.find(x => x.itemId === itemId);
     weeklyList[itemId] = {
       addedTs: existing?.addedTs || now,
       note: _buildNotes[itemId] ?? existing?.note ?? '',
-      qty: _buildQtys[itemId] ?? existing?.qty
+      qty: _buildQtys[itemId] ?? existing?.qty,
+      name: item?.name ?? existing?.name,
+      urgency: item?.urgency ?? existing?.urgency,
     };
     if (_buildQtys[itemId]) wlQtys[itemId] = _buildQtys[itemId];
   });
