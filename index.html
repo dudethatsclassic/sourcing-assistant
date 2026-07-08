@@ -2104,6 +2104,21 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
+    .wl-sync-btn {
+      padding: 5px 9px;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: inherit;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.3s;
+    }
+    .wl-sync-btn.spinning { animation: wlSpin 0.7s linear infinite; }
+    @keyframes wlSpin { to { transform: rotate(360deg); } }
     .wl-note-input {
       width: 100%;
       border: none;
@@ -2455,6 +2470,7 @@
       <div class="weekly-list-title">📋 Weekly List</div>
       <div class="wl-header-actions">
         <button class="wl-build-btn" onclick="openBuildFromSales()">📅 From Sales</button>
+        <button class="wl-sync-btn" id="wlSyncBtn" onclick="syncFromJSONBin()" title="Sync from cloud">↻</button>
         <button class="wl-copy-btn" onclick="copyWeeklyList()">Copy</button>
         <button class="wl-done-btn" onclick="closeWeeklyList()">Done</button>
       </div>
@@ -4957,6 +4973,32 @@ function updateWLNote(itemId, note) {
   weeklyList[itemId] = { ...weeklyList[itemId], note };
   saveLocal();
   saveStoreData_raw(currentPayload());
+}
+
+async function syncFromJSONBin() {
+  const btn = $('wlSyncBtn');
+  if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
+  try {
+    const data = await loadStoreData();
+    storeTags        = data.tags || {};
+    archivedIds      = new Set(data.archived || []);
+    purchases        = data.purchases || {};
+    manualSales      = data.manualSales || {};
+    inboundOverrides = data.inboundOverrides || {};
+    weeklyList       = data.weeklyList || {};
+    wlQtys           = {}; // clear pending adjustments — server is source of truth
+    saveLocal();
+    renderWeeklyListBtn();
+    renderWeeklyListModal();
+    renderFilterChips();
+    renderGrid(sortItems(items, $('sortSelect').value));
+    renderSummary(items);
+    toast('Synced!');
+  } catch (e) {
+    toast('Sync failed — check connection', true);
+  } finally {
+    if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+  }
 }
 
 // ── Build from Sales ──────────────────────────────────────────────────────────
