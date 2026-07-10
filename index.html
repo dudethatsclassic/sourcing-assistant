@@ -2123,6 +2123,61 @@
     }
     .wl-sync-btn.spinning { animation: wlSpin 0.7s linear infinite; }
     @keyframes wlSpin { to { transform: rotate(360deg); } }
+
+    /* ── Weekly List Store Picker ── */
+    .wl-picker-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 600;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.18s;
+    }
+    .wl-picker-overlay.open { opacity: 1; pointer-events: all; }
+    .wl-picker-panel {
+      background: var(--surface);
+      border-radius: 16px 16px 0 0;
+      padding: 20px 20px 32px;
+      width: 100%; max-width: 500px;
+    }
+    .wl-picker-panel.open { transform: translateY(0); }
+    .wl-picker-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--muted); margin-bottom: 4px;
+    }
+    .wl-picker-name {
+      font-size: 15px; font-weight: 600; color: var(--text);
+      margin-bottom: 16px; line-height: 1.3;
+    }
+    .wl-picker-stores {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;
+    }
+    .wl-picker-store-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 20px;
+      font-size: 13px; font-weight: 500; font-family: inherit;
+      cursor: pointer; border: 1.5px solid var(--border);
+      background: var(--surface2); color: var(--muted);
+      transition: all 0.12s; touch-action: manipulation;
+    }
+    .wl-picker-store-btn.selected {
+      border-color: var(--accent); background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .wl-picker-confirm {
+      width: 100%; padding: 13px; border-radius: var(--r-xs);
+      border: none; background: var(--accent); color: #fff;
+      font-size: 14px; font-weight: 600; font-family: inherit;
+      cursor: pointer; touch-action: manipulation; min-height: 44px;
+    }
+    .wl-picker-confirm:disabled { opacity: 0.4; }
+    .wl-picker-cancel {
+      display: block; width: 100%; margin-top: 10px;
+      padding: 10px; border: none; background: none;
+      font-size: 13px; color: var(--muted); font-family: inherit;
+      cursor: pointer; touch-action: manipulation;
+    }
+
     .wl-note-input {
       width: 100%;
       border: none;
@@ -2483,6 +2538,17 @@
     <div class="weekly-list-footer">
       <button class="wl-clear-btn" onclick="clearWeeklyList()">Clear List</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Weekly List Store Picker ── -->
+<div class="wl-picker-overlay" id="wlPickerOverlay" onclick="closeWLStorePicker()">
+  <div class="wl-picker-panel" onclick="event.stopPropagation()">
+    <div class="wl-picker-label">Add to weekly list</div>
+    <div class="wl-picker-name" id="wlPickerName"></div>
+    <div class="wl-picker-stores" id="wlPickerStores"></div>
+    <button class="wl-picker-confirm" id="wlPickerConfirm" onclick="confirmWLStorePicker()">Add to List</button>
+    <button class="wl-picker-cancel" onclick="closeWLStorePicker()">Cancel</button>
   </div>
 </div>
 
@@ -4658,25 +4724,96 @@ function weeklyListAddBtnHtml(itemId, isList = false) {
 function toggleWeeklyList(itemId) {
   if (weeklyList[itemId]) {
     delete weeklyList[itemId];
-  } else {
-    const item = items.find(x => x.itemId === itemId);
-    weeklyList[itemId] = { addedTs: Date.now(), name: item?.name, urgency: item?.urgency };
+    saveLocal();
+    saveStoreData_raw(currentPayload());
+    renderWeeklyListBtn();
+    const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
+    if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
+    const row = document.querySelector(`.list-row[data-id="${CSS.escape(itemId)}"]`);
+    if (row) { const btn = row.querySelector('.list-weekly-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, true); }
+    if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
+    toast('Removed from weekly list');
+    return;
   }
+  const stores = storeTags[itemId] || [];
+  if (stores.length >= 2) {
+    openWLStorePicker(itemId);
+    return;
+  }
+  // 0 or 1 store — add directly
+  const item = items.find(x => x.itemId === itemId);
+  weeklyList[itemId] = { addedTs: Date.now(), name: item?.name, urgency: item?.urgency };
   saveLocal();
   saveStoreData_raw(currentPayload());
   renderWeeklyListBtn();
   const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
-  if (card) {
-    const btn = card.querySelector('.weekly-add-btn');
-    if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false);
-  }
+  if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
   const row = document.querySelector(`.list-row[data-id="${CSS.escape(itemId)}"]`);
-  if (row) {
-    const btn = row.querySelector('.list-weekly-btn');
-    if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, true);
-  }
+  if (row) { const btn = row.querySelector('.list-weekly-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, true); }
   if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
-  toast(weeklyList[itemId] ? 'Added to weekly list' : 'Removed from weekly list');
+  toast('Added to weekly list');
+}
+
+let _wlPickerItemId = null;
+let _wlPickerSelected = new Set();
+
+function openWLStorePicker(itemId) {
+  _wlPickerItemId = itemId;
+  const stores = storeTags[itemId] || [];
+  _wlPickerSelected = new Set(stores);
+  const item = items.find(x => x.itemId === itemId);
+  $('wlPickerName').textContent = item?.name || '';
+  renderWLPickerStores();
+  $('wlPickerOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeWLStorePicker() {
+  $('wlPickerOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  _wlPickerItemId = null;
+}
+
+function renderWLPickerStores() {
+  const stores = storeTags[_wlPickerItemId] || [];
+  $('wlPickerStores').innerHTML = stores.map(s =>
+    `<button class="wl-picker-store-btn${_wlPickerSelected.has(s) ? ' selected' : ''}"
+       data-store="${escHtml(s)}" onclick="toggleWLPickerStore(this)">
+       ${storeLogoImg(s, 16)} ${escHtml(s)}
+     </button>`
+  ).join('');
+  $('wlPickerConfirm').disabled = _wlPickerSelected.size === 0;
+}
+
+function toggleWLPickerStore(btn) {
+  const store = btn.dataset.store;
+  if (_wlPickerSelected.has(store)) _wlPickerSelected.delete(store);
+  else _wlPickerSelected.add(store);
+  renderWLPickerStores();
+}
+
+function confirmWLStorePicker() {
+  if (!_wlPickerItemId) return;
+  const itemId = _wlPickerItemId;
+  const allStores = storeTags[itemId] || [];
+  const excluded = allStores.filter(s => !_wlPickerSelected.has(s));
+  const item = items.find(x => x.itemId === itemId);
+  weeklyList[itemId] = {
+    addedTs: Date.now(),
+    name: item?.name,
+    urgency: item?.urgency,
+    ...(excluded.length ? { excludedStores: excluded } : {}),
+  };
+  saveLocal();
+  saveStoreData_raw(currentPayload());
+  renderWeeklyListBtn();
+  const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
+  if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
+  const row = document.querySelector(`.list-row[data-id="${CSS.escape(itemId)}"]`);
+  if (row) { const btn = row.querySelector('.list-weekly-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, true); }
+  if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
+  closeWLStorePicker();
+  toast('Added to weekly list');
 }
 
 function openWeeklyList() {
