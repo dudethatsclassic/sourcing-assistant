@@ -432,10 +432,12 @@
       animation: fadeUp 0.28s ease forwards;
     }
 
-    .card:hover {
-      box-shadow: var(--shadow-md);
-      border-color: var(--border);
-      transform: translateY(-1px);
+    @media (hover: hover) {
+      .card:hover {
+        box-shadow: var(--shadow-md);
+        border-color: var(--border);
+        transform: translateY(-1px);
+      }
     }
 
     @keyframes fadeUp {
@@ -1606,7 +1608,8 @@
       gap: 5px;
       width: 100%;
       margin-top: 10px;
-      padding: 8px 12px;
+      padding: 11px 12px;
+      min-height: 44px;
       border-radius: var(--r-xs);
       font-size: 12px;
       font-weight: 500;
