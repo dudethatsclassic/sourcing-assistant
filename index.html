@@ -4888,6 +4888,28 @@ function renderWeeklyListModal() {
     html += `</div>`;
   });
   body.innerHTML = html;
+  enrichWLImages();
+}
+
+async function enrichWLImages() {
+  const body = $('weeklyListBody');
+  if (!body) return;
+  const seen = new Set();
+  const placeholders = [...body.querySelectorAll('[data-wl-thumb-id]')];
+  for (const p of placeholders) {
+    const itemId = p.dataset.wlThumbId;
+    if (seen.has(itemId)) continue;
+    seen.add(itemId);
+    const imgUrl = await fetchWalmartImage(itemId);
+    if (!imgUrl) continue;
+    body.querySelectorAll(`[data-wl-thumb-id="${CSS.escape(itemId)}"]`).forEach(el => {
+      const img = document.createElement('img');
+      img.className = 'wl-thumb';
+      img.src = imgUrl;
+      img.onerror = () => img.remove();
+      el.replaceWith(img);
+    });
+  }
 }
 
 function wlItemHtml(item, store) {
@@ -4912,9 +4934,10 @@ function wlItemHtml(item, store) {
 
   const urgHtml = item.urgency === 'critical' ? `<span style="color:var(--red);font-size:11px">Out of Stock</span>`
                 : item.urgency === 'low'      ? `<span style="color:var(--orange);font-size:11px">Running Low</span>` : '';
-  const thumbHtml = item.image
-    ? `<img class="wl-thumb" src="${escHtml(item.image)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="wl-thumb-placeholder" style="display:none">📦</div>`
-    : `<div class="wl-thumb-placeholder">📦</div>`;
+  const imgUrl = item.image || imgCache[item.itemId] || null;
+  const thumbHtml = imgUrl
+    ? `<img class="wl-thumb" src="${escHtml(imgUrl)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="wl-thumb-placeholder" style="display:none">📦</div>`
+    : `<div class="wl-thumb-placeholder" data-wl-thumb-id="${escHtml(item.itemId)}">📦</div>`;
 
   return `
     <div class="wl-item${isBought ? ' is-done' : ''}" data-wl-id="${escHtml(item.itemId)}" data-wl-store="${escHtml(store)}">
@@ -4968,23 +4991,17 @@ function adjustWLQty(itemId, delta) {
   if (weeklyList[itemId]) weeklyList[itemId] = { ...weeklyList[itemId], qty: newQty };
   document.querySelectorAll(`[data-qty-id="${CSS.escape(itemId)}"]`).forEach(el => { el.textContent = newQty; });
 
-  // Adjusting qty while shopping means "I'm getting this many" — always sync to purchases
-  purchases[itemId] = { qty: newQty, ts: purchases[itemId]?.ts || Date.now() };
-
-  // Reflect the check state in the weekly list row
+  // Only sync qty to purchases (and refresh card) if already marked bought
   const addedTs = weeklyList[itemId]?.addedTs || 0;
-  const isBought = purchases[itemId].ts > addedTs;
-  document.querySelectorAll(`[data-wl-id="${CSS.escape(itemId)}"]`).forEach(row => {
-    row.classList.toggle('is-done', isBought);
-    const check = row.querySelector('.wl-check');
-    if (check) { check.classList.toggle('checked', isBought); check.textContent = isBought ? '✓' : ''; }
-  });
-
-  refreshPurchaseUI(itemId);
-  renderClearBoughtBtn();
-  renderSummary(activeFilter && activeFilter !== '__sale__'
-    ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
-    : items);
+  const isBought = !!(purchases[itemId]?.ts > addedTs);
+  if (isBought) {
+    purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
+    refreshPurchaseUI(itemId);
+    renderClearBoughtBtn();
+    renderSummary(activeFilter && activeFilter !== '__sale__'
+      ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
+      : items);
+  }
   saveLocal();
   saveStoreData_raw(currentPayload());
 }
