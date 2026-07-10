@@ -5291,7 +5291,7 @@ function refreshCardStore(itemId) {
   const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
   if (!card) return;
   const storeDiv = card.querySelector('.card-store');
-  if (storeDiv) storeDiv.innerHTML = storeTagBtn(itemId);
+  if (storeDiv) storeDiv.innerHTML = storeTagBtn(itemId) + purchaseBtnHtml(itemId, false) + weeklyListAddBtnHtml(itemId, false);
 }
 
 function renderSummary(all) {
