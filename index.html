@@ -4998,7 +4998,8 @@ async function openWLDetail(itemId) {
   const urgency = fullItem?.urgency || wlMeta.urgency || 'ok';
 
   $('wlDetailName').textContent = name;
-  $('wlDetailId').textContent = 'Item ID: ' + itemId;
+  $('wlDetailId').innerHTML = 'Item ID: ' + escHtml(itemId)
+    + (fullItem?.gtin ? `<br>GTIN: <span style="cursor:pointer" onclick="navigator.clipboard.writeText('${escHtml(fullItem.gtin)}');toast('GTIN copied')">${escHtml(fullItem.gtin)} 📋</span>` : '');
 
   // Image
   const imgUrl = fullItem?.image || imgCache[itemId] || await fetchWalmartImage(itemId) || null;
