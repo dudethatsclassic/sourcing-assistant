@@ -3868,7 +3868,8 @@ function fmtPriceRange(min, max) {
 
 function imgTag(item) {
   if (item.image) {
-    return `<img src="${escHtml(item.image)}" alt="" loading="lazy"
+    const scaleStyle = item.itemId === '13908444' ? ' style="transform:scale(0.7)"' : '';
+    return `<img src="${escHtml(item.image)}" alt="" loading="lazy"${scaleStyle}
               onerror="this.parentElement.innerHTML='<div class=\\'img-placeholder\\'>📦</div>'">`;
   }
   return '<div class="img-placeholder">📦</div>';
@@ -4104,6 +4105,7 @@ function updateCardImage(item) {
       if (placeholder) {
         const img = document.createElement('img');
         img.src = item.image; img.alt = ''; img.loading = 'lazy';
+        if (item.itemId === '13908444') img.style.transform = 'scale(0.7)';
         img.onerror = () => img.remove();
         placeholder.replaceWith(img);
       }
