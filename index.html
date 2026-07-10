@@ -2178,6 +2178,69 @@
       cursor: pointer; touch-action: manipulation;
     }
 
+    /* ── Weekly List Item Detail ── */
+    .wl-detail-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 700;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.18s;
+    }
+    .wl-detail-overlay.open { opacity: 1; pointer-events: all; }
+    .wl-detail-panel {
+      background: var(--surface);
+      border-radius: 16px 16px 0 0;
+      padding: 20px 20px 40px;
+      width: 100%; max-width: 500px;
+      max-height: 80vh; overflow-y: auto;
+    }
+    .wl-detail-top {
+      display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px;
+    }
+    .wl-detail-img {
+      width: 72px; height: 72px; border-radius: 10px;
+      object-fit: contain; background: var(--surface2); flex-shrink: 0; padding: 4px;
+    }
+    .wl-detail-img-placeholder {
+      width: 72px; height: 72px; border-radius: 10px;
+      background: var(--surface2); display: flex; align-items: center;
+      justify-content: center; font-size: 28px; flex-shrink: 0;
+    }
+    .wl-detail-name {
+      font-size: 16px; font-weight: 600; color: var(--text);
+      line-height: 1.35; flex: 1;
+    }
+    .wl-detail-id {
+      font-size: 11px; color: var(--muted); margin-top: 4px;
+    }
+    .wl-detail-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 8px; margin-bottom: 14px;
+    }
+    .wl-detail-stat {
+      background: var(--surface2); border-radius: 8px;
+      padding: 10px 8px; text-align: center;
+    }
+    .wl-detail-stat-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .wl-detail-stat-val   { font-size: 16px; font-weight: 700; margin-top: 3px; }
+    .wl-detail-prices {
+      display: flex; gap: 8px; margin-bottom: 14px;
+    }
+    .wl-detail-price-box {
+      flex: 1; background: var(--surface2); border-radius: 8px; padding: 10px;
+    }
+    .wl-detail-price-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .wl-detail-price-val   { font-size: 15px; font-weight: 700; margin-top: 3px; }
+    .wl-detail-close {
+      width: 100%; padding: 13px; border-radius: var(--r-xs);
+      border: none; background: var(--surface2); color: var(--text);
+      font-size: 14px; font-weight: 600; font-family: inherit;
+      cursor: pointer; touch-action: manipulation; min-height: 44px; margin-top: 4px;
+    }
+    .wl-item-name { cursor: pointer; }
+    .wl-item-name:active { opacity: 0.6; }
+
     .wl-note-input {
       width: 100%;
       border: none;
@@ -2549,6 +2612,22 @@
     <div class="wl-picker-stores" id="wlPickerStores"></div>
     <button class="wl-picker-confirm" id="wlPickerConfirm" onclick="confirmWLStorePicker()">Add to List</button>
     <button class="wl-picker-cancel" onclick="closeWLStorePicker()">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Weekly List Item Detail ── -->
+<div class="wl-detail-overlay" id="wlDetailOverlay" onclick="closeWLDetail()">
+  <div class="wl-detail-panel" onclick="event.stopPropagation()">
+    <div class="wl-detail-top">
+      <div id="wlDetailImg"></div>
+      <div>
+        <div class="wl-detail-name" id="wlDetailName"></div>
+        <div class="wl-detail-id" id="wlDetailId"></div>
+      </div>
+    </div>
+    <div class="wl-detail-stats" id="wlDetailStats"></div>
+    <div class="wl-detail-prices" id="wlDetailPrices"></div>
+    <button class="wl-detail-close" onclick="closeWLDetail()">Close</button>
   </div>
 </div>
 
@@ -4912,6 +4991,66 @@ async function enrichWLImages() {
   }
 }
 
+async function openWLDetail(itemId) {
+  const wlMeta = weeklyList[itemId] || {};
+  const fullItem = items.find(x => x.itemId === itemId);
+  const name = fullItem?.name || wlMeta.name || itemId;
+  const urgency = fullItem?.urgency || wlMeta.urgency || 'ok';
+
+  $('wlDetailName').textContent = name;
+  $('wlDetailId').textContent = 'Item ID: ' + itemId;
+
+  // Image
+  const imgUrl = fullItem?.image || imgCache[itemId] || await fetchWalmartImage(itemId) || null;
+  const imgEl = $('wlDetailImg');
+  if (imgUrl) {
+    imgEl.innerHTML = `<img class="wl-detail-img" src="${escHtml(imgUrl)}" onerror="this.parentElement.innerHTML='<div class=\\'wl-detail-img-placeholder\\'>📦</div>'">`;
+  } else {
+    imgEl.innerHTML = `<div class="wl-detail-img-placeholder">📦</div>`;
+  }
+
+  // Stats
+  const urgColor = urgency === 'critical' ? 'var(--red)' : urgency === 'low' ? 'var(--orange)' : 'var(--green)';
+  const urgLabel = urgency === 'critical' ? 'Out of Stock' : urgency === 'low' ? 'Running Low' : 'In Stock';
+  if (fullItem) {
+    $('wlDetailStats').innerHTML = `
+      <div class="wl-detail-stat">
+        <div class="wl-detail-stat-label">In Stock</div>
+        <div class="wl-detail-stat-val" style="color:${fullItem.currentStock === 0 ? 'var(--red)' : 'var(--text)'}">${fullItem.currentStock}</div>
+      </div>
+      <div class="wl-detail-stat">
+        <div class="wl-detail-stat-label">Buy Now</div>
+        <div class="wl-detail-stat-val" style="color:${fullItem.suggestBuy > 0 ? 'var(--accent)' : 'var(--muted)'}">${fullItem.suggestBuy}</div>
+      </div>
+      <div class="wl-detail-stat">
+        <div class="wl-detail-stat-label">Velocity</div>
+        <div class="wl-detail-stat-val">${fullItem.weekly % 1 === 0 ? fullItem.weekly : fullItem.weekly.toFixed(1)}<span style="font-size:11px;font-weight:500;color:var(--muted)">/wk</span></div>
+      </div>`;
+  } else {
+    $('wlDetailStats').innerHTML = `
+      <div class="wl-detail-stat" style="grid-column:1/-1">
+        <div class="wl-detail-stat-label">Status</div>
+        <div class="wl-detail-stat-val" style="font-size:13px;color:${urgColor}">${urgLabel}</div>
+      </div>`;
+  }
+
+  // Prices
+  if (fullItem?.avgCost || fullItem?.avgSell) {
+    $('wlDetailPrices').innerHTML = `
+      ${fullItem.avgCost ? `<div class="wl-detail-price-box"><div class="wl-detail-price-label">Avg Cost</div><div class="wl-detail-price-val">${fmtPrice(fullItem.avgCost)}</div></div>` : ''}
+      ${fullItem.avgSell ? `<div class="wl-detail-price-box"><div class="wl-detail-price-label">Avg Sell</div><div class="wl-detail-price-val">${fmtPrice(fullItem.avgSell)}</div></div>` : ''}
+      ${fullItem.avgProfit != null ? `<div class="wl-detail-price-box"><div class="wl-detail-price-label">Avg Profit</div><div class="wl-detail-price-val" style="color:${fullItem.avgProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${fullItem.avgProfit < 0 ? '-$' + Math.abs(fullItem.avgProfit).toFixed(2) : '$' + fullItem.avgProfit.toFixed(2)}</div></div>` : ''}`;
+  } else {
+    $('wlDetailPrices').innerHTML = '';
+  }
+
+  $('wlDetailOverlay').classList.add('open');
+}
+
+function closeWLDetail() {
+  $('wlDetailOverlay').classList.remove('open');
+}
+
 function wlItemHtml(item, store) {
   const addedTs  = weeklyList[item.itemId]?.addedTs || 0;
   const isBought = !!(purchases[item.itemId]?.ts > addedTs);
@@ -4944,7 +5083,7 @@ function wlItemHtml(item, store) {
       <div class="wl-check${isBought ? ' checked' : ''}" onclick="toggleWLItem('${escHtml(item.itemId)}')">${isBought ? '✓' : ''}</div>
       ${thumbHtml}
       <div class="wl-item-info">
-        <div class="wl-item-name">${escHtml(item.name)}</div>
+        <div class="wl-item-name" onclick="event.stopPropagation();openWLDetail('${escHtml(item.itemId)}')">${escHtml(item.name)}</div>
         <div class="wl-item-sub">${urgHtml}${autoSaleHtml}${manualSaleHtml}</div>
         <input class="wl-note-input" placeholder="Add note…" value="${escHtml(note)}" oninput="updateWLNote('${escHtml(item.itemId)}', this.value)" onclick="event.stopPropagation()">
       </div>
