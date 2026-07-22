@@ -2096,6 +2096,121 @@
     }
     .wl-clear-btn:hover { border-color: var(--red); color: var(--red); }
 
+    /* ── Bought List Overlay ── */
+    .bought-list-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.28);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s;
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .bought-list-overlay.open { opacity: 1; pointer-events: all; }
+    .bought-list-panel {
+      background: var(--surface);
+      border-radius: 18px 18px 0 0;
+      width: 100%;
+      max-width: 600px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 0 -4px 32px rgba(0,0,0,0.12);
+    }
+    .bought-list-overlay.open .bought-list-panel { transform: translateY(0); }
+    @media (min-width: 600px) {
+      .bought-list-overlay { align-items: center; }
+      .bought-list-panel {
+        border-radius: 18px;
+        max-height: 82vh;
+        transform: translateY(16px);
+        opacity: 0;
+        transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.3s;
+      }
+      .bought-list-overlay.open .bought-list-panel { transform: translateY(0); opacity: 1; }
+    }
+    .bought-list-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border-light);
+      flex-shrink: 0;
+    }
+    .bought-list-title { font-size: 17px; font-weight: 700; flex: 1; }
+    .bought-list-body { flex: 1; overflow-y: auto; padding: 8px 0 4px; overscroll-behavior: contain; }
+    .bought-list-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-light);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .bought-list-item:active { background: var(--hover); }
+    .bought-list-item-img {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      object-fit: contain;
+      background: var(--border-light);
+      flex-shrink: 0;
+    }
+    .bought-list-item-placeholder {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      background: var(--border-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .bought-list-item-info { flex: 1; min-width: 0; }
+    .bought-list-item-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .bought-list-item-qty {
+      font-size: 12px;
+      color: var(--green);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .bought-list-item-stores {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .bought-list-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .bought-list-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-light);
+      display: flex;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
     .wl-build-btn {
       padding: 5px 10px;
       border-radius: 8px;
@@ -2544,7 +2659,7 @@
       <div class="toolbar-top">
         <div class="section-title" id="sectionTitle"></div>
         <button class="archived-toggle" id="archivedToggle" onclick="toggleShowArchived()" style="display:none"></button>
-        <button class="archived-toggle" id="clearBoughtBtn" onclick="clearAllPurchases()" style="display:none"></button>
+        <button class="archived-toggle" id="clearBoughtBtn" onclick="openBoughtList()" style="display:none"></button>
         <button class="wl-toolbar-btn" id="weeklyListBtn" onclick="openWeeklyList()" title="Weekly List">📋<span class="wl-toolbar-badge" id="weeklyListBadge"></span></button>
         <button class="settings-btn" id="settingsBtn" onclick="openSettings()" title="API Settings">⚙️</button>
       </div>
@@ -2629,6 +2744,20 @@
     <div class="wl-detail-stats" id="wlDetailStats"></div>
     <div class="wl-detail-prices" id="wlDetailPrices"></div>
     <button class="wl-detail-close" onclick="closeWLDetail()">Close</button>
+  </div>
+</div>
+
+<!-- ── Bought List ── -->
+<div class="bought-list-overlay" id="boughtListOverlay" onclick="closeBoughtList()">
+  <div class="bought-list-panel" onclick="event.stopPropagation()">
+    <div class="bought-list-header">
+      <div class="bought-list-title">✓ Bought</div>
+      <button class="wl-done-btn" onclick="closeBoughtList()">Done</button>
+    </div>
+    <div class="bought-list-body" id="boughtListBody"></div>
+    <div class="bought-list-footer">
+      <button class="wl-clear-btn" onclick="clearAllPurchases()">Clear All Bought</button>
+    </div>
   </div>
 </div>
 
@@ -4490,7 +4619,7 @@ function renderClearBoughtBtn() {
   const count = Object.keys(purchases).length;
   if (count === 0) { el.style.display = 'none'; return; }
   el.style.display = 'inline-flex';
-  el.textContent = `Clear ${count} bought`;
+  el.textContent = `✓ ${count} Bought`;
 }
 
 function clearAllPurchases() {
@@ -4500,9 +4629,50 @@ function clearAllPurchases() {
   saveLocal();
   saveStoreData_raw(currentPayload());
   renderClearBoughtBtn();
+  closeBoughtList();
   renderGrid(sortItems(items, $('sortSelect').value));
   renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
   toast('All bought marks cleared');
+}
+
+function openBoughtList() {
+  renderBoughtList();
+  $('boughtListOverlay').classList.add('open');
+  lockBodyScroll();
+}
+
+function closeBoughtList() {
+  if (!$('boughtListOverlay').classList.contains('open')) return;
+  $('boughtListOverlay').classList.remove('open');
+  unlockBodyScroll();
+}
+
+function renderBoughtList() {
+  const body = $('boughtListBody');
+  if (!body) return;
+  const entries = Object.entries(purchases).sort((a, b) => b[1].ts - a[1].ts);
+  if (!entries.length) {
+    body.innerHTML = '<div class="bought-list-empty">No items marked bought</div>';
+    return;
+  }
+  body.innerHTML = entries.map(([itemId, p]) => {
+    const item = items.find(x => x.itemId === itemId);
+    const name = item?.name || itemId;
+    const imgUrl = item?.image || imgCache[itemId] || null;
+    const thumbHtml = imgUrl
+      ? `<img class="bought-list-item-img" src="${escHtml(imgUrl)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="bought-list-item-placeholder" style="display:none">📦</div>`
+      : `<div class="bought-list-item-placeholder">📦</div>`;
+    const stores = storeTags[itemId] || [];
+    const storeHtml = stores.length ? `<div class="bought-list-item-stores">${stores.map(s => escHtml(s)).join(' · ')}</div>` : '';
+    return `<div class="bought-list-item" onclick="closeBoughtList();openBuySheet('${escHtml(itemId)}')">
+      ${thumbHtml}
+      <div class="bought-list-item-info">
+        <div class="bought-list-item-name">${escHtml(name)}</div>
+        <div class="bought-list-item-qty">✓ ${p.qty} unit${p.qty !== 1 ? 's' : ''}</div>
+        ${storeHtml}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function toggleShowArchived() {
