@@ -3501,7 +3501,6 @@ function lockBodyScroll() {
     document.body.style.position = 'fixed';
     document.body.style.top      = `-${_scrollLockY}px`;
     document.body.style.width    = '100%';
-    lockBodyScroll();
   }
 }
 function unlockBodyScroll() {
@@ -3510,7 +3509,6 @@ function unlockBodyScroll() {
     document.body.style.position = '';
     document.body.style.top      = '';
     document.body.style.width    = '';
-    unlockBodyScroll();
     window.scrollTo(0, _scrollLockY);
   }
 }
@@ -4849,7 +4847,7 @@ function enterShoppingMode(store) {
 
   $('shoppingBody').innerHTML = html;
   overlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
+  lockBodyScroll();
   shoppingQtys = {}; // reset pending qty adjustments
 }
 
@@ -4935,7 +4933,7 @@ function toggleShoppingItem(itemId, store) {
 
 function exitShoppingMode() {
   $('shoppingOverlay').classList.remove('open');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
   // Re-render grid to reflect any bought changes
   renderGrid(sortItems(items, $('sortSelect').value));
 }
@@ -5037,12 +5035,12 @@ function openWLStorePicker(itemId) {
   $('wlPickerName').textContent = item?.name || '';
   renderWLPickerStores();
   $('wlPickerOverlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  lockBodyScroll();
 }
 
 function closeWLStorePicker() {
   $('wlPickerOverlay').classList.remove('open');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
   _wlPickerItemId = null;
 }
 
@@ -5104,12 +5102,12 @@ function openWeeklyList() {
   if (backfilled) { saveLocal(); saveStoreData_raw(currentPayload()); }
   renderWeeklyListModal();
   $('weeklyListOverlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  lockBodyScroll();
 }
 
 function closeWeeklyList() {
   $('weeklyListOverlay').classList.remove('open');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
 }
 
 function renderWeeklyListModal() {
