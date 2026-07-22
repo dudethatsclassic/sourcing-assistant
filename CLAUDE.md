@@ -4,7 +4,7 @@ Walmart WFS retail arbitrage sourcing assistant. Single `index.html` on GitHub P
 
 **Live URL:** https://dudethatsclassic.github.io/sourcing-assistant/  
 **GitHub repo:** https://github.com/dudethatsclassic/sourcing-assistant  
-**Local path:** `/Users/natescottsmith/Desktop/Claude Code/sourcing-assistant/`
+**Local path:** `/Users/nsmith/Desktop/Claude Code/SourceBuddy/`
 
 ---
 
@@ -165,7 +165,7 @@ Multiple rows for the same Item ID are averaged (avgCost, avgSell).
 ## Git Workflow
 
 ```bash
-cd "/Users/natescottsmith/Desktop/Claude Code/sourcing-assistant"
+cd "/Users/nsmith/Desktop/Claude Code/SourceBuddy"
 git add index.html
 git commit -m "message"
 git push
