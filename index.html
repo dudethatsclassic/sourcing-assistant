@@ -153,6 +153,21 @@
       margin-bottom: 20px;
     }
 
+    .setup-toggle-btn {
+      display: block;
+      margin: 0 auto 12px;
+      padding: 5px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: inherit;
+      touch-action: manipulation;
+    }
+
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -2581,7 +2596,7 @@
 
 <main>
   <!-- ── Setup Panel ── -->
-  <div class="panel">
+  <div class="panel" id="setupPanel">
     <div class="panel-title">Data Sources</div>
 
     <div class="grid-2" style="margin-bottom:14px">
@@ -2650,6 +2665,9 @@
     <div class="mapper-grid" id="wfsMapperGrid"></div>
     <button class="btn btn-primary" style="margin-top:12px;font-size:13px;padding:8px 18px" id="applyMapper">Apply & Generate</button>
   </div>
+
+  <!-- ── Setup toggle (shown when panel is collapsed after generate) ── -->
+  <button class="setup-toggle-btn" id="setupToggleBtn" style="display:none" onclick="toggleSetupPanel()">⚙ Data Sources</button>
 
   <!-- ── Results ── -->
   <div id="results">
@@ -3506,10 +3524,11 @@ function lockBodyScroll() {
 function unlockBodyScroll() {
   if (--_scrollLockCount <= 0) {
     _scrollLockCount = 0;
+    const y = _scrollLockY;
     document.body.style.position = '';
     document.body.style.top      = '';
     document.body.style.width    = '';
-    window.scrollTo(0, _scrollLockY);
+    requestAnimationFrame(() => window.scrollTo(0, y));
   }
 }
 
@@ -6021,10 +6040,12 @@ async function generate(colMap = {}) {
     // Apply inbound shipment data (in-transit units not yet checked in to WFS)
     if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
 
-    // Show results
+    // Show results, collapse setup panel
     $('emptyState').style.display  = 'none';
     $('results').style.display     = 'block';
     $('exportBtn').style.display   = 'inline-flex';
+    $('setupPanel').style.display  = 'none';
+    $('setupToggleBtn').style.display = 'block';
 
     renderSummary(items);
     renderFilterChips();
@@ -6116,6 +6137,14 @@ function reSort() {
 }
 
 // ─── Clear ────────────────────────────────────────────────────────────────────
+function toggleSetupPanel() {
+  const panel = $('setupPanel');
+  const btn   = $('setupToggleBtn');
+  const collapsed = panel.style.display === 'none';
+  panel.style.display = collapsed ? '' : 'none';
+  btn.textContent = collapsed ? '⌃ Hide Setup' : '⚙ Data Sources';
+}
+
 function clearAll() {
   wfsRows  = null;
   sbRows   = null;
@@ -6129,10 +6158,12 @@ function clearAll() {
   shipNameMap = new Map();
   saleMap = {};
 
-  $('results').style.display    = 'none';
-  $('wfsMapper').style.display  = 'none';
-  $('exportBtn').style.display  = 'none';
-  $('emptyState').style.display = 'block';
+  $('results').style.display       = 'none';
+  $('wfsMapper').style.display     = 'none';
+  $('exportBtn').style.display     = 'none';
+  $('emptyState').style.display    = 'block';
+  $('setupPanel').style.display    = '';
+  $('setupToggleBtn').style.display = 'none';
   $('searchInput').value = '';
   searchQuery = '';
 }
