@@ -1501,11 +1501,13 @@
         padding: 24px 28px 28px;
         transform: translate(-50%, calc(-50% + 16px));
         opacity: 0;
+        pointer-events: none;
         box-shadow: 0 8px 40px rgba(0,0,0,0.18);
       }
       .store-sheet.open {
         transform: translate(-50%, -50%);
         opacity: 1;
+        pointer-events: auto;
       }
     }
 
@@ -4951,6 +4953,7 @@ function toggleShoppingItem(itemId, store) {
 }
 
 function exitShoppingMode() {
+  if (!$('shoppingOverlay').classList.contains('open')) return;
   $('shoppingOverlay').classList.remove('open');
   unlockBodyScroll();
   // Re-render grid to reflect any bought changes
@@ -5058,6 +5061,7 @@ function openWLStorePicker(itemId) {
 }
 
 function closeWLStorePicker() {
+  if (!$('wlPickerOverlay').classList.contains('open')) return;
   $('wlPickerOverlay').classList.remove('open');
   unlockBodyScroll();
   _wlPickerItemId = null;
@@ -5125,6 +5129,7 @@ function openWeeklyList() {
 }
 
 function closeWeeklyList() {
+  if (!$('weeklyListOverlay').classList.contains('open')) return;
   $('weeklyListOverlay').classList.remove('open');
   unlockBodyScroll();
 }
@@ -5260,6 +5265,7 @@ async function openWLDetail(itemId) {
 }
 
 function closeWLDetail() {
+  if (!$('wlDetailOverlay').classList.contains('open')) return;
   $('wlDetailOverlay').classList.remove('open');
   unlockBodyScroll();
 }
@@ -5590,6 +5596,7 @@ function openBuildFromSales() {
 }
 
 function closeBuildFromSales() {
+  if (!$('buildOverlay').classList.contains('open')) return;
   $('buildOverlay').classList.remove('open');
   unlockBodyScroll();
 }
