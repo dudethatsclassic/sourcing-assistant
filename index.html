@@ -3072,12 +3072,13 @@ async function loadStoreData(attempt = 0) {
     const remoteTagCount = Object.keys(tags).length;
     if (local?.tags && localTagCount > remoteTagCount + 2) {
       console.warn(`JSONBin has ${remoteTagCount} tags but local has ${localTagCount} — restoring from backup.`);
-      const restored = { tags: local.tags, archived: local.archived || [], purchases: local.purchases || {}, shipment: local.shipment || {}, manualSales: local.manualSales || {}, inboundOverrides: local.inboundOverrides || {}, weeklyList: local.weeklyList || {} };
+      const restored = { tags: local.tags, archived: local.archived || [], purchases: local.purchases || {}, shipment: local.shipment || {}, shipmentFiles: local.shipmentFiles || {}, manualSales: local.manualSales || {}, inboundOverrides: local.inboundOverrides || {}, weeklyList: local.weeklyList || {} };
       saveStoreData_raw(restored);
       return restored;
     }
 
-    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList };
+    const rawShipmentFiles = data.record?.shipmentFiles || {};
+    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList };
     return result;
   } catch {
     if (attempt === 0) {
@@ -3103,7 +3104,7 @@ async function saveStoreData_raw(payload) {
 }
 
 function currentPayload() {
-  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), manualSales, inboundOverrides, weeklyList };
+  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, manualSales, inboundOverrides, weeklyList };
 }
 
 async function saveStoreTags() {
@@ -3123,7 +3124,7 @@ async function saveShipmentToCloud() {
     const res = await fetch(JSONBIN_URL + '/latest', { headers: { 'X-Master-Key': JSONBIN_KEY } });
     const data = await res.json();
     const current = data.record || {};
-    await saveStoreData_raw({ ...current, shipment: Object.fromEntries(shipNameMap) });
+    await saveStoreData_raw({ ...current, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap });
   } catch (e) { console.error('Shipment cloud save failed', e); }
 }
 
@@ -3499,6 +3500,7 @@ let wfsRows  = null;   // raw parsed CSV rows
 let sbRows   = null;
 let histRows = null;   // extended history rows (optional — longer date range for velocity)
 let shipNameMap = new Map(); // combined name→qty across all uploaded shipment CSVs
+let shipFileMap = {};        // filename → {name→qty} — per-file contributions
 let items   = [];     // computed items
 let wfsColMap = {};   // manual column overrides
 let storeTags = {};   // { itemId: [storeName] }
@@ -6053,8 +6055,18 @@ async function generate(colMap = {}) {
     });
 
     // If no shipment CSVs uploaded this session, restore from cloud
-    if (!shipNameMap.size && storeData.shipment && Object.keys(storeData.shipment).length) {
-      shipNameMap = new Map(Object.entries(storeData.shipment).map(([k, v]) => [k, Number(v)]));
+    if (!shipNameMap.size) {
+      if (storeData.shipmentFiles && Object.keys(storeData.shipmentFiles).length) {
+        shipFileMap = storeData.shipmentFiles;
+        shipNameMap = new Map();
+        Object.values(shipFileMap).forEach(fileObj =>
+          Object.entries(fileObj).forEach(([name, qty]) =>
+            shipNameMap.set(name, (shipNameMap.get(name) || 0) + Number(qty))
+          )
+        );
+      } else if (storeData.shipment && Object.keys(storeData.shipment).length) {
+        shipNameMap = new Map(Object.entries(storeData.shipment).map(([k, v]) => [k, Number(v)]));
+      }
     }
 
     // Apply inbound shipment data (in-transit units not yet checked in to WFS)
@@ -6219,29 +6231,31 @@ document.addEventListener('DOMContentLoaded', () => {
     return parseShipmentRows(rows);
   }
 
-  function mergeShipMap(newMap) {
-    newMap.forEach((qty, name) => {
-      shipNameMap.set(name, (shipNameMap.get(name) || 0) + qty);
-    });
+  function recomputeShipNameMap() {
+    shipNameMap = new Map();
+    Object.values(shipFileMap).forEach(fileObj =>
+      Object.entries(fileObj).forEach(([name, qty]) =>
+        shipNameMap.set(name, (shipNameMap.get(name) || 0) + Number(qty))
+      )
+    );
   }
 
   function handleShipFiles(files) {
     const csvFiles = [...files].filter(f => f.name.toLowerCase().endsWith('.csv'));
     if (!csvFiles.length) { toast('Please upload .csv files', true); return; }
 
-    // Reset map on every new upload — each upload is a complete replacement
-    shipNameMap = new Map();
-
     let loaded = 0;
     csvFiles.forEach(file => {
       const reader = new FileReader();
       reader.onload = e => {
-        mergeShipMap(parseOneShipmentText(e.target.result));
+        const parsed = parseOneShipmentText(e.target.result);
+        shipFileMap[file.name] = Object.fromEntries(parsed);
         loaded++;
         if (loaded === csvFiles.length) {
-          const count = csvFiles.length;
+          recomputeShipNameMap();
+          const count = Object.keys(shipFileMap).length;
           shipNameEl.textContent = count === 1
-            ? `✓ ${csvFiles[0].name}`
+            ? `✓ ${Object.keys(shipFileMap)[0]}`
             : `✓ ${count} shipment files loaded`;
           shipDropEl.classList.add('loaded');
           saveLocal();
