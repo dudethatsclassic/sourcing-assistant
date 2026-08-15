@@ -6030,7 +6030,7 @@ async function generate(colMap = {}) {
         wfsInventoryData = {};
         wfsInventoryTs   = Date.now();
         invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound }; });
-        saveStoreData_raw(currentPayload()).then(() =>
+        saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(() =>
           toast('WFS inventory synced to cloud ☁️')
         );
       }
