@@ -3500,7 +3500,31 @@ let wfsRows  = null;   // raw parsed CSV rows
 let sbRows   = null;
 let histRows = null;   // extended history rows (optional — longer date range for velocity)
 let shipNameMap = new Map(); // combined name→qty across all uploaded shipment CSVs
-let shipFileMap = {};        // filename → {name→qty} — per-file contributions
+let shipFileMap = {};        // filename → {items:{name→qty}, shipDate:ms|null}
+let shipDateSummary = '';    // human-readable date range of non-expired shipments
+const SHIP_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
+
+function recomputeShipNameMap() {
+  const cutoff = Date.now() - SHIP_EXPIRY_MS;
+  shipNameMap = new Map();
+  const dates = [];
+  Object.values(shipFileMap).forEach(fileData => {
+    const items    = fileData.items || fileData; // handle old flat format
+    const shipDate = fileData.shipDate || null;
+    if (shipDate && shipDate < cutoff) return;   // expired — skip
+    if (shipDate) dates.push(shipDate);
+    Object.entries(items).forEach(([name, qty]) =>
+      shipNameMap.set(name, (shipNameMap.get(name) || 0) + Number(qty))
+    );
+  });
+  if (dates.length) {
+    const fmt = ts => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const [lo, hi] = [Math.min(...dates), Math.max(...dates)];
+    shipDateSummary = lo === hi ? fmt(lo) : `${fmt(lo)}–${fmt(hi)}`;
+  } else {
+    shipDateSummary = '';
+  }
+}
 let items   = [];     // computed items
 let wfsColMap = {};   // manual column overrides
 let storeTags = {};   // { itemId: [storeName] }
@@ -3822,7 +3846,7 @@ function parseWFSRows(rows, colMap = {}) {
     map.set(id, {
       itemId: id,
       currentStock: Math.round(num(row[stockCol])),
-      inbound: inboundCol ? Math.round(num(row[inboundCol])) : 0,
+      inbound: 0,
       gtin: gtinCol ? (row[gtinCol] || '').trim().replace(/^="?(.*?)"?$/, '$1') : '',
     });
   });
@@ -4235,7 +4259,7 @@ function renderCard(item, delay = 0) {
       ${imgTag(item)}
       <div class="badge-stack">
         <div class="badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
-        ${item.inbound > 0 ? `<div class="badge badge-inbound" onclick="editInboundOverride('${escHtml(item.itemId)}')" style="cursor:pointer" title="Click to override">${item.inbound} Inbound${inboundOverrides[item.itemId] !== undefined ? ' ✎' : ''}</div>` : ''}
+        ${item.inbound > 0 ? `<div class="badge badge-inbound" onclick="editInboundOverride('${escHtml(item.itemId)}')" style="cursor:pointer" title="${shipDateSummary ? `Shipped ${shipDateSummary} · ` : ''}Click to override">${item.inbound} Inbound${inboundOverrides[item.itemId] !== undefined ? ' ✎' : ''}</div>` : ''}
       </div>
       ${item.isNew ? '<div class="badge badge-new" style="top:10px;left:10px;right:auto">🆕 New</div>' : ''}
       <button class="card-archive-btn" onclick="toggleArchive('${escHtml(item.itemId)}')"
@@ -4494,7 +4518,7 @@ function renderListRow(item, delay = 0) {
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
       <div class="list-badge ${badgeClass(item.urgency)}">${badgeLabel(item.urgency)}</div>
-      ${item.inbound > 0 ? `<div class="list-badge badge-inbound" onclick="editInboundOverride('${escHtml(item.itemId)}')" style="cursor:pointer" title="Click to override">${item.inbound} Inbound${inboundOverrides[item.itemId] !== undefined ? ' ✎' : ''}</div>` : ''}
+      ${item.inbound > 0 ? `<div class="list-badge badge-inbound" onclick="editInboundOverride('${escHtml(item.itemId)}')" style="cursor:pointer" title="${shipDateSummary ? `Shipped ${shipDateSummary} · ` : ''}Click to override">${item.inbound} Inbound${inboundOverrides[item.itemId] !== undefined ? ' ✎' : ''}</div>` : ''}
       ${item.isNew ? '<div class="list-badge badge-new">🆕 New</div>' : ''}
     </div>
     <div class="list-stats-group">
@@ -6058,12 +6082,7 @@ async function generate(colMap = {}) {
     if (!shipNameMap.size) {
       if (storeData.shipmentFiles && Object.keys(storeData.shipmentFiles).length) {
         shipFileMap = storeData.shipmentFiles;
-        shipNameMap = new Map();
-        Object.values(shipFileMap).forEach(fileObj =>
-          Object.entries(fileObj).forEach(([name, qty]) =>
-            shipNameMap.set(name, (shipNameMap.get(name) || 0) + Number(qty))
-          )
-        );
+        recomputeShipNameMap();
       } else if (storeData.shipment && Object.keys(storeData.shipment).length) {
         shipNameMap = new Map(Object.entries(storeData.shipment).map(([k, v]) => [k, Number(v)]));
       }
@@ -6225,19 +6244,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function parseOneShipmentText(text) {
     const lines = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    let shipDate = null;
+    for (let i = 0; i < Math.min(6, lines.length); i++) {
+      const m = lines[i].match(/estimated\s+ship[^:]*:\s*(.+)/i);
+      if (m) {
+        // Header format: "Aug 10- 2026 04:00 UTC" — dashes replace commas
+        const raw = m[1].replace(/-\s*/g, ' ').replace(/\s+\d{1,2}:\d{2}.*/, '').trim();
+        const d = new Date(raw);
+        if (!isNaN(d)) { shipDate = d.getTime(); break; }
+      }
+    }
     let headerIdx = lines.findIndex(l => /items?\s*name/i.test(l));
     if (headerIdx === -1) headerIdx = 0;
     const { rows } = parseCSV(lines.slice(headerIdx).join('\n'));
-    return parseShipmentRows(rows);
-  }
-
-  function recomputeShipNameMap() {
-    shipNameMap = new Map();
-    Object.values(shipFileMap).forEach(fileObj =>
-      Object.entries(fileObj).forEach(([name, qty]) =>
-        shipNameMap.set(name, (shipNameMap.get(name) || 0) + Number(qty))
-      )
-    );
+    return { items: parseShipmentRows(rows), shipDate };
   }
 
   function handleShipFiles(files) {
@@ -6248,8 +6268,8 @@ document.addEventListener('DOMContentLoaded', () => {
     csvFiles.forEach(file => {
       const reader = new FileReader();
       reader.onload = e => {
-        const parsed = parseOneShipmentText(e.target.result);
-        shipFileMap[file.name] = Object.fromEntries(parsed);
+        const { items: parsed, shipDate } = parseOneShipmentText(e.target.result);
+        shipFileMap[file.name] = { items: Object.fromEntries(parsed), shipDate };
         loaded++;
         if (loaded === csvFiles.length) {
           recomputeShipNameMap();
