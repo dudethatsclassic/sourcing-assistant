@@ -6030,7 +6030,7 @@ async function generate(colMap = {}) {
       if (wfsIsXlsx && wfsRows) {
         wfsInventoryData = {};
         wfsInventoryTs   = Date.now();
-        invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound }; });
+        invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound, g: e.gtin || '' }; });
         saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(() =>
           toast('WFS inventory synced to cloud ☁️')
         );
@@ -6040,8 +6040,8 @@ async function generate(colMap = {}) {
       wfsInventoryTs   = storeData.wfsInventoryTs;
       wfsIsXlsx = true;
       invMap = new Map();
-      Object.entries(wfsInventoryData).forEach(([id, { s, i }]) =>
-        invMap.set(id, { itemId: id, currentStock: Number(s) || 0, inbound: Number(i) || 0, gtin: '' })
+      Object.entries(wfsInventoryData).forEach(([id, { s, i, g }]) =>
+        invMap.set(id, { itemId: id, currentStock: Number(s) || 0, inbound: Number(i) || 0, gtin: g || '' })
       );
       const age = wfsInventoryTs ? formatAge(wfsInventoryTs) : null;
       $('wfsName').textContent = age ? `☁ Synced ${age} ago` : '☁ Synced from cloud';
