@@ -3072,13 +3072,15 @@ async function loadStoreData(attempt = 0) {
     const remoteTagCount = Object.keys(tags).length;
     if (local?.tags && localTagCount > remoteTagCount + 2) {
       console.warn(`JSONBin has ${remoteTagCount} tags but local has ${localTagCount} — restoring from backup.`);
-      const restored = { tags: local.tags, archived: local.archived || [], purchases: local.purchases || {}, shipment: local.shipment || {}, shipmentFiles: local.shipmentFiles || {}, manualSales: local.manualSales || {}, inboundOverrides: local.inboundOverrides || {}, weeklyList: local.weeklyList || {} };
+      const restored = { tags: local.tags, archived: local.archived || [], purchases: local.purchases || {}, shipment: local.shipment || {}, shipmentFiles: local.shipmentFiles || {}, manualSales: local.manualSales || {}, inboundOverrides: local.inboundOverrides || {}, weeklyList: local.weeklyList || {}, wfsInventory: local.wfsInventory || {}, wfsInventoryTs: local.wfsInventoryTs || null };
       saveStoreData_raw(restored);
       return restored;
     }
 
-    const rawShipmentFiles = data.record?.shipmentFiles || {};
-    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList };
+    const rawShipmentFiles  = data.record?.shipmentFiles  || {};
+    const rawWfsInventory   = data.record?.wfsInventory   || {};
+    const rawWfsInventoryTs = data.record?.wfsInventoryTs || null;
+    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList, wfsInventory: rawWfsInventory, wfsInventoryTs: rawWfsInventoryTs };
     return result;
   } catch {
     if (attempt === 0) {
@@ -3104,7 +3106,7 @@ async function saveStoreData_raw(payload) {
 }
 
 function currentPayload() {
-  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, manualSales, inboundOverrides, weeklyList };
+  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, manualSales, inboundOverrides, weeklyList, wfsInventory: wfsInventoryData, wfsInventoryTs };
 }
 
 async function saveStoreTags() {
@@ -3496,8 +3498,10 @@ async function fetchSaleData(appItems) {
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let wfsRows    = null;   // raw parsed CSV rows
-let wfsIsXlsx  = false;  // true when WFS source is xlsx (inbound column is trusted)
+let wfsRows         = null;   // raw parsed CSV rows
+let wfsIsXlsx       = false;  // true when WFS source is xlsx (inbound column is trusted)
+let wfsInventoryData = {};    // compact {itemId:{s,i}} — synced to cloud for cross-device use
+let wfsInventoryTs   = null;  // timestamp of last xlsx upload
 let sbRows   = null;
 let histRows = null;   // extended history rows (optional — longer date range for velocity)
 let shipNameMap = new Map(); // combined name→qty across all uploaded shipment CSVs
@@ -3690,6 +3694,13 @@ function findCol(sampleRow, candidates) {
 function num(str) {
   const n = parseFloat((str || '0').replace(/[$,\s]/g, ''));
   return isNaN(n) ? 0 : n;
+}
+function formatAge(ts) {
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 60)  return `${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs  < 24)  return `${hrs}h`;
+  return `${Math.round(hrs / 24)}d`;
 }
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
@@ -6011,8 +6022,26 @@ async function generate(colMap = {}) {
         return;
       }
       invMap = result;
-      // Also build name→id map for accurate shipment matching
       wfsNameToId = buildWFSNameMap(wfsSource, colMap);
+      if (wfsIsXlsx && wfsRows) {
+        wfsInventoryData = {};
+        wfsInventoryTs   = Date.now();
+        invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound }; });
+        saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(() =>
+          toast('WFS inventory synced to cloud ☁️')
+        );
+      }
+    } else if (storeData.wfsInventory && Object.keys(storeData.wfsInventory).length) {
+      wfsInventoryData = storeData.wfsInventory;
+      wfsInventoryTs   = storeData.wfsInventoryTs;
+      wfsIsXlsx = true;
+      invMap = new Map();
+      Object.entries(wfsInventoryData).forEach(([id, { s, i }]) =>
+        invMap.set(id, { itemId: id, currentStock: Number(s) || 0, inbound: Number(i) || 0, gtin: '' })
+      );
+      const age = wfsInventoryTs ? formatAge(wfsInventoryTs) : null;
+      $('wfsName').textContent = age ? `☁ Synced ${age} ago` : '☁ Synced from cloud';
+      $('wfsDrop').classList.add('loaded');
     }
 
     // 3. Sales data — use manual upload, or auto-fetch from GitHub
