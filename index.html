@@ -2616,7 +2616,7 @@
       <div class="field">
         <label>WFS Inventory Report</label>
         <div class="drop-zone" id="wfsDrop">
-          <input type="file" accept=".csv" id="wfsFile">
+          <input type="file" accept=".csv,.xlsx" id="wfsFile">
           <div class="drop-icon">📦</div>
           <div class="drop-label">Drop CSV or tap to upload</div>
           <div class="drop-name" id="wfsName"></div>
@@ -3496,7 +3496,8 @@ async function fetchSaleData(appItems) {
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let wfsRows  = null;   // raw parsed CSV rows
+let wfsRows    = null;   // raw parsed CSV rows
+let wfsIsXlsx  = false;  // true when WFS source is xlsx (inbound column is trusted)
 let sbRows   = null;
 let histRows = null;   // extended history rows (optional — longer date range for velocity)
 let shipNameMap = new Map(); // combined name→qty across all uploaded shipment CSVs
@@ -3825,7 +3826,7 @@ const WFS_ID_HINTS    = ['item_id', 'itemid', 'sku', 'id', 'asin', 'upc', 'produ
 const WFS_STOCK_HINTS = ['available', 'on_hand', 'fulfillable', 'current_stock', 'stock', 'qty', 'quantity', 'wfs_qty', 'units_available', 'sellable'];
 const WFS_INBOUND_HINTS = ['inbound', 'in_transit', 'incoming', 'pending', 'on_order', 'shipment', 'receiving', 'transit'];
 
-function parseWFSRows(rows, colMap = {}) {
+function parseWFSRows(rows, colMap = {}, { useInbound = false } = {}) {
   if (!rows.length) return new Map();
   const s = rows[0];
 
@@ -3846,7 +3847,7 @@ function parseWFSRows(rows, colMap = {}) {
     map.set(id, {
       itemId: id,
       currentStock: Math.round(num(row[stockCol])),
-      inbound: 0,
+      inbound: useInbound && inboundCol ? Math.round(num(row[inboundCol])) : 0,
       gtin: gtinCol ? (row[gtinCol] || '').trim().replace(/^="?(.*?)"?$/, '$1') : '',
     });
   });
@@ -6003,7 +6004,7 @@ async function generate(colMap = {}) {
     }
     let wfsNameToId = new Map();
     if (wfsSource) {
-      const result = parseWFSRows(wfsSource, colMap);
+      const result = parseWFSRows(wfsSource, colMap, { useInbound: wfsIsXlsx });
       if (result.__needsMapper) {
         setSpinner(false);
         showMapper(result.headers);
@@ -6089,7 +6090,7 @@ async function generate(colMap = {}) {
     }
 
     // Apply inbound shipment data (in-transit units not yet checked in to WFS)
-    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
+    if (shipNameMap.size && !wfsIsXlsx) applyShipmentInbound(items, shipNameMap, wfsNameToId);
 
     // Show results, collapse setup panel
     $('emptyState').style.display  = 'none';
@@ -6152,7 +6153,7 @@ function setupDrop(dropId, inputId, nameId, onReady) {
           });
           return out;
         });
-        onReady(rows);
+        onReady(rows, true);
         nameEl.textContent = '✓ ' + file.name;
         drop.classList.add('loaded');
       };
@@ -6160,7 +6161,7 @@ function setupDrop(dropId, inputId, nameId, onReady) {
     } else {
       reader.onload = e => {
         const { rows } = parseCSV(e.target.result);
-        onReady(rows);
+        onReady(rows, false);
         nameEl.textContent = '✓ ' + file.name;
         drop.classList.add('loaded');
       };
@@ -6225,8 +6226,9 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSettingsBtn(); // show green gear if Kroger creds are saved
   checkGitHubFiles(); // non-blocking — updates drop zones if GitHub files exist
 
-  setupDrop('wfsDrop', 'wfsFile', 'wfsName', rows => {
-    wfsRows = rows;
+  setupDrop('wfsDrop', 'wfsFile', 'wfsName', (rows, isXlsx) => {
+    wfsRows   = rows;
+    wfsIsXlsx = !!isXlsx;
     $('wfsDrop').classList.remove('github-ready');
   });
   setupDrop('sbDrop', 'sbFile', 'sbName', rows => {
