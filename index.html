@@ -6003,10 +6003,11 @@ async function generate(colMap = {}) {
     setSpinner(true, 'Loading store data…');
     const storeData = await loadStoreData();
 
-    // 2. WFS — use manual upload, or auto-fetch from GitHub
+    // 2. WFS — use manual upload, cloud sync, or auto-fetch from GitHub (in that order)
     let invMap = new Map();
     let wfsSource = wfsRows;
-    if (!wfsSource) {
+    const hasCloudInventory = storeData.wfsInventory && Object.keys(storeData.wfsInventory).length > 0;
+    if (!wfsSource && !hasCloudInventory) {
       setSpinner(true, 'Fetching inventory from GitHub…');
       const fetched = await fetchGitHubInventory().catch(() => null);
       if (fetched) {
