@@ -6000,6 +6000,9 @@ async function generate(colMap = {}) {
       sheetMap = parseSheetCSVText(csv);
     }
 
+    setSpinner(true, 'Loading store data…');
+    const storeData = await loadStoreData();
+
     // 2. WFS — use manual upload, or auto-fetch from GitHub
     let invMap = new Map();
     let wfsSource = wfsRows;
@@ -6084,8 +6087,6 @@ async function generate(colMap = {}) {
     setSpinner(true, 'Computing par levels…');
     items = mergeData(sheetMap, invMap, velMap, longVelMap, weeksTarget);
 
-    setSpinner(true, 'Loading store data…');
-    const storeData = await loadStoreData();
     storeTags        = storeData.tags;
     archivedIds      = new Set(storeData.archived);
     purchases        = storeData.purchases || {};
