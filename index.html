@@ -6246,7 +6246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lines = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
     let shipDate = null;
     for (let i = 0; i < Math.min(6, lines.length); i++) {
-      const m = lines[i].match(/estimated\s+ship[^:]*:\s*(.+)/i);
+      const m = lines[i].match(/estimated\s+(?:ship|delivery)[^:]*:\s*(.+)/i);
       if (m) {
         // Header format: "Aug 10- 2026 04:00 UTC" — dashes replace commas
         const raw = m[1].replace(/-\s*/g, ' ').replace(/\s+\d{1,2}:\d{2}.*/, '').trim();
