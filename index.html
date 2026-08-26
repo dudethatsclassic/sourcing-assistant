@@ -3426,11 +3426,12 @@ let inboundOverrides = {};   // { itemId: number } — manual inbound count over
 let _scrollLockCount = 0;
 let _touchStartY = 0;
 function _preventBodyScroll(e) {
+  const dy = e.touches[0].clientY - _touchStartY;
+  if (Math.abs(dy) < 6) return; // ignore micro-movements so taps still fire clicks
   let node = e.target;
   while (node && node !== document.body) {
     const style = window.getComputedStyle(node);
     if (['auto', 'scroll'].includes(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
-      const dy = e.touches[0].clientY - _touchStartY;
       const atTop    = node.scrollTop <= 0 && dy > 0;
       const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1 && dy < 0;
       if (!atTop && !atBottom) return;
