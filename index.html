@@ -5047,16 +5047,18 @@ function confirmWLStorePicker() {
 
 function openWeeklyList() {
   wlQtys = {};
-  // Backfill name/urgency for any entries added before this was stored
+  // Backfill name/urgency and migrate done state from purchases for existing entries
   let backfilled = false;
   Object.keys(weeklyList).forEach(itemId => {
-    if (!weeklyList[itemId]?.name) {
+    let updated = weeklyList[itemId];
+    if (!updated?.name) {
       const item = items.find(x => x.itemId === itemId);
-      if (item) {
-        weeklyList[itemId] = { ...weeklyList[itemId], name: item.name, urgency: item.urgency };
-        backfilled = true;
-      }
+      if (item) { updated = { ...updated, name: item.name, urgency: item.urgency }; backfilled = true; }
     }
+    if (updated?.done === undefined && purchases[itemId]) {
+      updated = { ...updated, done: true }; backfilled = true;
+    }
+    if (updated !== weeklyList[itemId]) weeklyList[itemId] = updated;
   });
   if (backfilled) { saveLocal(); saveStoreData_raw(currentPayload()); }
   renderWeeklyListModal();
@@ -5207,8 +5209,9 @@ function closeWLDetail() {
 }
 
 function wlItemHtml(item, store) {
-  const isBought = !!purchases[item.itemId];
-  const qty = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
+  const isBought = !!weeklyList[item.itemId]?.done;
+  const boughtQty = purchases[item.itemId]?.qty || 0;
+  const qty = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (boughtQty || item.suggestBuy || 1);
   const note = weeklyList[item.itemId]?.note || '';
 
   const isNoneGroup  = store === '__none__';
@@ -5227,6 +5230,8 @@ function wlItemHtml(item, store) {
 
   const urgHtml = item.urgency === 'critical' ? `<span style="color:var(--red);font-size:11px">Out of Stock</span>`
                 : item.urgency === 'low'      ? `<span style="color:var(--orange);font-size:11px">Running Low</span>` : '';
+  const partialHtml = !isBought && boughtQty > 0
+    ? `<span style="color:var(--green);font-size:11px">✓ ${boughtQty} bought</span>` : '';
   const imgUrl = item.image || imgCache[item.itemId] || null;
   const thumbHtml = imgUrl
     ? `<img class="wl-thumb" src="${escHtml(imgUrl)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="wl-thumb-placeholder" style="display:none">📦</div>`
@@ -5238,7 +5243,7 @@ function wlItemHtml(item, store) {
       ${thumbHtml}
       <div class="wl-item-info">
         <div class="wl-item-name" onclick="event.stopPropagation();openWLDetail('${escHtml(item.itemId)}')">${escHtml(item.name)}</div>
-        <div class="wl-item-sub">${urgHtml}${autoSaleHtml}${manualSaleHtml}</div>
+        <div class="wl-item-sub">${urgHtml}${partialHtml}${autoSaleHtml}${manualSaleHtml}</div>
         <input class="wl-note-input" placeholder="Add note…" value="${escHtml(note)}" oninput="updateWLNote('${escHtml(item.itemId)}', this.value)" onclick="event.stopPropagation()">
       </div>
       <div class="wl-stepper">
@@ -5252,16 +5257,22 @@ function wlItemHtml(item, store) {
 
 function toggleWLItem(itemId) {
   const item = items.find(x => x.itemId === itemId);
-  if (purchases[itemId]) {
+  const isDone = !!weeklyList[itemId]?.done;
+  if (isDone) {
+    weeklyList[itemId] = { ...weeklyList[itemId], done: false };
     delete purchases[itemId];
   } else {
-    const qty = wlQtys[itemId] ?? weeklyList[itemId]?.qty ?? (item?.suggestBuy || 1);
-    purchases[itemId] = { qty, ts: Date.now() };
+    weeklyList[itemId] = { ...weeklyList[itemId], done: true };
+    // Preserve any existing purchase qty (from a partial buy); otherwise use stepper
+    if (!purchases[itemId]) {
+      const qty = wlQtys[itemId] ?? weeklyList[itemId]?.qty ?? (item?.suggestBuy || 1);
+      purchases[itemId] = { qty, ts: Date.now() };
+    }
   }
   saveLocal();
   saveStoreData_raw(currentPayload());
 
-  const isBought = !!purchases[itemId];
+  const isBought = !!weeklyList[itemId]?.done;
   document.querySelectorAll(`[data-wl-id="${CSS.escape(itemId)}"]`).forEach(row => {
     row.classList.toggle('is-done', isBought);
     const check = row.querySelector('.wl-check');
@@ -5283,8 +5294,8 @@ function adjustWLQty(itemId, delta) {
   if (weeklyList[itemId]) weeklyList[itemId] = { ...weeklyList[itemId], qty: newQty };
   document.querySelectorAll(`[data-qty-id="${CSS.escape(itemId)}"]`).forEach(el => { el.textContent = newQty; });
 
-  // Only sync qty to purchases (and refresh card) if already marked bought
-  const isBought = !!purchases[itemId];
+  // Only sync qty to purchases (and refresh card) if already checked off
+  const isBought = !!weeklyList[itemId]?.done;
   if (isBought) {
     purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
     refreshPurchaseUI(itemId);
@@ -5421,7 +5432,7 @@ function copyWeeklyList() {
   storeNames.forEach(store => {
     lines.push((store === NONE ? 'No Store Tag' : store).toUpperCase());
     groups[store].forEach(item => {
-      const check = purchases[item.itemId] ? '[x]' : '[ ]';
+      const check = weeklyList[item.itemId]?.done ? '[x]' : '[ ]';
       const qty   = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
       const sale  = (saleMap[item.itemId]?.length || manualSales[item.itemId]) ? ' 🏷️' : '';
       const note  = weeklyList[item.itemId]?.note ? ` — ${weeklyList[item.itemId].note}` : '';
