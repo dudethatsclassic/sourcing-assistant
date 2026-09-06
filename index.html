@@ -4643,7 +4643,8 @@ function openBuySheet(itemId) {
   $('buyItemSub').textContent = existing
     ? `Currently marked: ✓ Bought ${existing.qty}`
     : `Suggested: ${item?.suggestBuy ?? 0} units`;
-  $('buyQtyInput').value = existing ? existing.qty : (item?.suggestBuy || 1);
+  const wlQty = weeklyList[itemId]?.qty;
+  $('buyQtyInput').value = existing ? existing.qty : (wlQty || item?.suggestBuy || 1);
   $('unmarkBtn').style.display = existing ? 'inline-flex' : 'none';
   $('sheetOverlay').classList.add('open');
   $('buySheet').classList.add('open');
@@ -4878,8 +4879,9 @@ function toggleShoppingItem(itemId, store) {
     if (check) check.textContent = isBought ? '✓' : '';
   }
 
-  // Keep card grid in sync
+  // Keep card grid and weekly list in sync
   refreshPurchaseUI(itemId);
+  if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
   renderClearBoughtBtn();
   renderSummary(activeFilter && activeFilter !== '__sale__'
     ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId))
@@ -5205,8 +5207,7 @@ function closeWLDetail() {
 }
 
 function wlItemHtml(item, store) {
-  const addedTs  = weeklyList[item.itemId]?.addedTs || 0;
-  const isBought = !!(purchases[item.itemId]?.ts > addedTs);
+  const isBought = !!purchases[item.itemId];
   const qty = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
   const note = weeklyList[item.itemId]?.note || '';
 
@@ -5260,8 +5261,7 @@ function toggleWLItem(itemId) {
   saveLocal();
   saveStoreData_raw(currentPayload());
 
-  const addedTs  = weeklyList[itemId]?.addedTs || 0;
-  const isBought = !!(purchases[itemId]?.ts > addedTs);
+  const isBought = !!purchases[itemId];
   document.querySelectorAll(`[data-wl-id="${CSS.escape(itemId)}"]`).forEach(row => {
     row.classList.toggle('is-done', isBought);
     const check = row.querySelector('.wl-check');
@@ -5284,8 +5284,7 @@ function adjustWLQty(itemId, delta) {
   document.querySelectorAll(`[data-qty-id="${CSS.escape(itemId)}"]`).forEach(el => { el.textContent = newQty; });
 
   // Only sync qty to purchases (and refresh card) if already marked bought
-  const addedTs = weeklyList[itemId]?.addedTs || 0;
-  const isBought = !!(purchases[itemId]?.ts > addedTs);
+  const isBought = !!purchases[itemId];
   if (isBought) {
     purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
     refreshPurchaseUI(itemId);
@@ -5422,8 +5421,7 @@ function copyWeeklyList() {
   storeNames.forEach(store => {
     lines.push((store === NONE ? 'No Store Tag' : store).toUpperCase());
     groups[store].forEach(item => {
-      const addedTs = weeklyList[item.itemId]?.addedTs || 0;
-      const check = (purchases[item.itemId]?.ts > addedTs) ? '[x]' : '[ ]';
+      const check = purchases[item.itemId] ? '[x]' : '[ ]';
       const qty   = wlQtys[item.itemId] ?? weeklyList[item.itemId]?.qty ?? (purchases[item.itemId]?.qty || item.suggestBuy || 1);
       const sale  = (saleMap[item.itemId]?.length || manualSales[item.itemId]) ? ' 🏷️' : '';
       const note  = weeklyList[item.itemId]?.note ? ` — ${weeklyList[item.itemId].note}` : '';
