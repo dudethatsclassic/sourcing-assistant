@@ -4601,6 +4601,9 @@ function renderBoughtList() {
   const body = $('boughtListBody');
   if (!body) return;
   const entries = Object.entries(purchases).sort((a, b) => b[1].ts - a[1].ts);
+  const totalUnits = entries.reduce((sum, [, p]) => sum + (p.qty || 0), 0);
+  const titleEl = $('boughtListOverlay')?.querySelector('.bought-list-title');
+  if (titleEl) titleEl.textContent = totalUnits ? `✓ Bought · ${totalUnits} unit${totalUnits !== 1 ? 's' : ''}` : '✓ Bought';
   if (!entries.length) {
     body.innerHTML = '<div class="bought-list-empty">No items marked bought</div>';
     return;
