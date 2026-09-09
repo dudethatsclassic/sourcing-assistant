@@ -5880,6 +5880,9 @@ async function generate(colMap = {}) {
   setSpinner(true, 'Fetching data…');
   $('wfsMapper').style.display = 'none';
 
+  // Wait for any in-flight file parses (user may drop and immediately click Generate)
+  await Promise.all(['wfsDrop', 'sbDrop', 'histDrop'].map(id => $(`${id}`) ?.__parsePending).filter(Boolean));
+
   try {
     // 1. Google Sheet
     let sheetMap = new Map();
@@ -6062,34 +6065,39 @@ function setupDrop(dropId, inputId, nameId, onReady) {
 
     const reader = new FileReader();
 
-    if (isXlsx) {
-      reader.onload = e => {
-        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        // Normalize keys to match our CSV format (lowercase, underscores)
-        const rows = raw.map(r => {
-          const out = {};
-          Object.keys(r).forEach(k => {
-            const nk = k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-            out[nk] = String(r[k] ?? '').trim();
+    drop.__parsePending = new Promise(resolve => {
+      if (isXlsx) {
+        reader.onload = e => {
+          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+          const rows = raw.map(r => {
+            const out = {};
+            Object.keys(r).forEach(k => {
+              const nk = k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+              out[nk] = String(r[k] ?? '').trim();
+            });
+            return out;
           });
-          return out;
-        });
-        onReady(rows, true);
-        nameEl.textContent = '✓ ' + file.name;
-        drop.classList.add('loaded');
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.onload = e => {
-        const { rows } = parseCSV(e.target.result);
-        onReady(rows, false);
-        nameEl.textContent = '✓ ' + file.name;
-        drop.classList.add('loaded');
-      };
-      reader.readAsText(file);
-    }
+          onReady(rows, true);
+          nameEl.textContent = '✓ ' + file.name;
+          drop.classList.add('loaded');
+          drop.__parsePending = null;
+          resolve();
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.onload = e => {
+          const { rows } = parseCSV(e.target.result);
+          onReady(rows, false);
+          nameEl.textContent = '✓ ' + file.name;
+          drop.classList.add('loaded');
+          drop.__parsePending = null;
+          resolve();
+        };
+        reader.readAsText(file);
+      }
+    });
   }
 
   input.addEventListener('change', e => handleFile(e.target.files[0]));
