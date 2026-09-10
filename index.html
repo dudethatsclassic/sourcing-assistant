@@ -6064,8 +6064,9 @@ async function generate(colMap = {}) {
       }
     }
 
-    // Apply inbound shipment data (in-transit units not yet checked in to WFS)
-    if (shipNameMap.size && !wfsIsXlsx) applyShipmentInbound(items, shipNameMap, wfsNameToId);
+    // Apply inbound shipment data (in-transit units not yet checked in to WFS).
+    // Uses Math.max so xlsx inbound isn't double-counted — fills gaps for new items the xlsx hasn't caught yet.
+    if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
 
     // Show results, collapse setup panel
     $('emptyState').style.display  = 'none';
