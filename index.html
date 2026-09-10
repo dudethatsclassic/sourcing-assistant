@@ -345,6 +345,14 @@
       white-space: nowrap;
     }
 
+    .inv-source-row {
+      font-size: 11px;
+      color: var(--muted-light);
+      margin: -8px 0 12px;
+      padding-left: 2px;
+    }
+    .inv-source-row strong { color: var(--text); font-weight: 600; }
+
     /* ── Toolbar ── */
     .toolbar {
       display: flex;
@@ -2674,6 +2682,7 @@
   <!-- ── Results ── -->
   <div id="results">
     <div class="summary-bar" id="summaryBar"></div>
+    <div class="inv-source-row" id="invSourceRow" style="display:none"></div>
     <div class="store-filters" id="storeFilters"></div>
     <div class="toolbar">
       <div class="toolbar-top">
@@ -3379,6 +3388,9 @@ async function fetchSaleData(appItems) {
 // ─── State ───────────────────────────────────────────────────────────────────
 let wfsRows         = null;   // raw parsed CSV rows
 let wfsIsXlsx       = false;  // true when WFS source is xlsx (inbound column is trusted)
+let _wfsSourceType  = null;   // 'file' | 'cloud' | 'github' | null
+let _wfsSourceName  = '';
+let _wfsSourceTs    = null;
 let wfsInventoryData = {};    // compact {itemId:{s,i}} — synced to cloud for cross-device use
 let wfsInventoryTs   = null;  // timestamp of last xlsx upload
 let sbRows   = null;
@@ -3581,6 +3593,28 @@ function formatAge(ts) {
   const hrs = Math.round(mins / 60);
   if (hrs  < 24)  return `${hrs}h`;
   return `${Math.round(hrs / 24)}d`;
+}
+
+function renderInvSourceBadge() {
+  const el = $('invSourceRow');
+  if (!el) return;
+  if (!_wfsSourceType) { el.style.display = 'none'; return; }
+  let icon, text;
+  if (_wfsSourceType === 'file') {
+    const age = _wfsSourceTs ? formatAge(_wfsSourceTs) : null;
+    icon = '📦';
+    text = `<strong>${_wfsSourceName}</strong> · ${age ? `uploaded ${age} ago` : 'just uploaded'}`;
+  } else if (_wfsSourceType === 'cloud') {
+    const age = _wfsSourceTs ? formatAge(_wfsSourceTs) : null;
+    icon = '☁';
+    text = `WFS Inventory · ${age ? `synced ${age} ago` : 'synced from cloud'}`;
+  } else {
+    icon = '🔗';
+    text = 'WFS Inventory · loaded from GitHub';
+  }
+  el.style.display = '';
+  el.textContent = '';
+  el.innerHTML = `${icon} ${text}`;
 }
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
@@ -5786,6 +5820,7 @@ function renderSummary(all) {
       <div class="stat-pill-label">Running Low</div>
       <div class="stat-pill-value" style="color:var(--orange)">${nLow}${boughtBadge(boughtLow)}</div>
     </div>`;
+  renderInvSourceBadge();
 }
 
 function setUrgencyFilter(val) {
@@ -5929,6 +5964,17 @@ async function generate(colMap = {}) {
         saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(() =>
           toast('WFS inventory synced to cloud ☁️')
         );
+        _wfsSourceType = 'file';
+        _wfsSourceTs   = wfsInventoryTs;
+        _wfsSourceName = $('wfsName').textContent.replace(/^[✓✔]\s*/, '');
+      } else if (wfsRows) {
+        _wfsSourceType = 'file';
+        _wfsSourceTs   = Date.now();
+        _wfsSourceName = $('wfsName').textContent.replace(/^[✓✔]\s*/, '');
+      } else {
+        _wfsSourceType = 'github';
+        _wfsSourceTs   = null;
+        _wfsSourceName = '';
       }
     } else if (storeData.wfsInventory && Object.keys(storeData.wfsInventory).length) {
       wfsInventoryData = storeData.wfsInventory;
@@ -5941,6 +5987,9 @@ async function generate(colMap = {}) {
       const age = wfsInventoryTs ? formatAge(wfsInventoryTs) : null;
       $('wfsName').textContent = age ? `☁ Synced ${age} ago` : '☁ Synced from cloud';
       $('wfsDrop').classList.add('loaded');
+      _wfsSourceType = 'cloud';
+      _wfsSourceTs   = wfsInventoryTs;
+      _wfsSourceName = '';
     }
 
     // 3. Sales data — use manual upload, or auto-fetch from GitHub
@@ -6134,6 +6183,8 @@ function clearAll() {
   histRows = null;
   items    = [];
   wfsColMap = {};
+  _wfsSourceType = null;
+  renderInvSourceBadge();
 
   ['wfsFile', 'sbFile', 'histFile', 'shipFile'].forEach(id => { $(id).value = ''; });
   ['wfsName', 'sbName', 'histName', 'shipName'].forEach(id => { $(id).textContent = ''; });
