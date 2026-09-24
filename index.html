@@ -3093,21 +3093,27 @@ async function loadStoreData(attempt = 0) {
     const remoteEditTs = data.record?.editTs || 0;
     const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList, wfsInventory: rawWfsInventory, wfsInventoryTs: rawWfsInventoryTs, editTs: remoteEditTs };
 
-    // This device has edits the cloud never received (and nothing newer was saved elsewhere) — local wins, then push it up
+    // This device has edits the cloud never received. Local wins only if the cloud hasn't
+    // changed since this device last synced; otherwise the cloud copy is authoritative.
     const dirtyTs = getDirtyTs();
-    if (local && dirtyTs > remoteEditTs) {
-      Object.assign(result, {
-        tags: local.tags || result.tags,
-        archived: local.archived || result.archived,
-        purchases: local.purchases || {},
-        manualSales: local.manualSales || {},
-        inboundOverrides: local.inboundOverrides || {},
-        weeklyList: local.weeklyList || {},
-        editTs: dirtyTs,
-      });
-      saveStoreData_raw({ ...data.record, ...result }).then(ok => {
-        if (ok && getDirtyTs() === dirtyTs) clearDirty();
-      });
+    if (local && dirtyTs) {
+      if (getBaseTs() === remoteEditTs) {
+        Object.assign(result, {
+          tags: local.tags || result.tags,
+          archived: local.archived || result.archived,
+          purchases: local.purchases || {},
+          manualSales: local.manualSales || {},
+          inboundOverrides: local.inboundOverrides || {},
+          weeklyList: local.weeklyList || {},
+        });
+        saveStoreData_raw({ ...data.record, ...result, editTs: dirtyTs }).then(ok => {
+          if (!ok) return;
+          setBaseTs(dirtyTs);
+          if (getDirtyTs() === dirtyTs) clearDirty();
+        });
+      } else {
+        clearDirty();
+      }
     }
     return result;
   } catch (e) {
@@ -3150,6 +3156,18 @@ function clearDirty() {
   try { localStorage.removeItem(LS_DIRTY_KEY); } catch (_) {}
 }
 
+// editTs of the cloud version this device's state is built on. Local edits may only
+// overwrite the cloud if it's still at this version — protects against pushing a stale
+// or empty offline backup over real data.
+const LS_BASE_KEY = 'sa_base';
+let _offlineState = false;
+function getBaseTs() {
+  try { const v = localStorage.getItem(LS_BASE_KEY); return v === null ? null : Number(v); } catch (_) { return null; }
+}
+function setBaseTs(ts) {
+  try { localStorage.setItem(LS_BASE_KEY, String(ts || 0)); } catch (_) {}
+}
+
 function queueCloudSave() {
   _editSeq++;
   try { localStorage.setItem(LS_DIRTY_KEY, String(Date.now())); } catch (_) {}
@@ -3158,13 +3176,16 @@ function queueCloudSave() {
 
 // One PUT in flight at a time, always sending the latest state, so rapid edits can't land out of order.
 function flushCloudSave() {
+  if (_offlineState) return Promise.resolve(); // state came from offline backup — reconcile on next successful load instead
   if (_cloudSaving) { _cloudSavePending = true; return _cloudSaving; }
   _cloudSaving = (async () => {
     do {
       _cloudSavePending = false;
       const sentTs = getDirtyTs();
-      const ok = await saveStoreData_raw({ ...currentPayload(), editTs: sentTs || Date.now() });
+      const sentEditTs = sentTs || Date.now();
+      const ok = await saveStoreData_raw({ ...currentPayload(), editTs: sentEditTs });
       if (!ok) break;
+      setBaseTs(sentEditTs);
       if (!_cloudSavePending && getDirtyTs() === sentTs) clearDirty();
     } while (_cloudSavePending);
     _cloudSaving = null;
@@ -5036,7 +5057,7 @@ function renderWeeklyListBtn() {
   const badge = $('weeklyListBadge');
   if (!el) return;
   const count = Object.keys(weeklyList).length;
-  el.style.display = count > 0 ? 'inline-flex' : 'none';
+  el.style.display = 'inline-flex';
   el.classList.toggle('has-items', count > 0);
   if (badge) badge.textContent = count > 0 ? count : '';
 }
@@ -5560,6 +5581,8 @@ async function syncFromJSONBin({ silent = false } = {}) {
     const data = await loadStoreData();
     if (data.offline) { if (!silent) toast('Cloud sync unavailable — changes are saved on this device and will upload later', true); return; }
     if (_editSeq !== seqBefore) return; // user edited while loading — keep their local changes
+    _offlineState = false;
+    setBaseTs(data.editTs);
     if (silent) {
       const snap = d => JSON.stringify([d.tags, d.archived, d.purchases, d.manualSales, d.inboundOverrides, d.weeklyList]);
       if (snap(data) === snap({ tags: storeTags, archived: [...archivedIds], purchases, manualSales, inboundOverrides, weeklyList })) return;
@@ -6035,9 +6058,13 @@ async function generate(colMap = {}) {
         wfsInventoryData = {};
         wfsInventoryTs   = Date.now();
         invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound, g: e.gtin || '' }; });
-        saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(ok =>
-          ok ? toast('WFS inventory synced to cloud ☁️') : toast('WFS inventory cloud sync failed — try Generate again', true)
-        );
+        if (storeData.offline) {
+          toast('Cloud unavailable — inventory saved on this device only. Generate again once sync is back.', true);
+        } else {
+          saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(ok =>
+            ok ? toast('WFS inventory synced to cloud ☁️') : toast('WFS inventory cloud sync failed — try Generate again', true)
+          );
+        }
         _wfsSourceType = 'file';
         _wfsSourceTs   = wfsInventoryTs;
         _wfsSourceName = $('wfsName').textContent.replace(/^[✓✔]\s*/, '');
@@ -6112,6 +6139,8 @@ async function generate(colMap = {}) {
     manualSales      = storeData.manualSales || {};
     inboundOverrides = storeData.inboundOverrides || {};
     weeklyList       = storeData.weeklyList || {};
+    _offlineState    = !!storeData.offline;
+    if (!storeData.offline) setBaseTs(storeData.editTs);
     saveLocal();
     renderWeeklyListBtn();
 
