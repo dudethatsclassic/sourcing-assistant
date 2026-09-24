@@ -3084,7 +3084,25 @@ async function loadStoreData(attempt = 0) {
     const rawShipmentFiles  = data.record?.shipmentFiles  || {};
     const rawWfsInventory   = data.record?.wfsInventory   || {};
     const rawWfsInventoryTs = data.record?.wfsInventoryTs || null;
-    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList, wfsInventory: rawWfsInventory, wfsInventoryTs: rawWfsInventoryTs };
+    const remoteEditTs = data.record?.editTs || 0;
+    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList, wfsInventory: rawWfsInventory, wfsInventoryTs: rawWfsInventoryTs, editTs: remoteEditTs };
+
+    // This device has edits the cloud never received (and nothing newer was saved elsewhere) — local wins, then push it up
+    const dirtyTs = getDirtyTs();
+    if (local && dirtyTs > remoteEditTs) {
+      Object.assign(result, {
+        tags: local.tags || result.tags,
+        archived: local.archived || result.archived,
+        purchases: local.purchases || {},
+        manualSales: local.manualSales || {},
+        inboundOverrides: local.inboundOverrides || {},
+        weeklyList: local.weeklyList || {},
+        editTs: dirtyTs,
+      });
+      saveStoreData_raw({ ...data.record, ...result }).then(ok => {
+        if (ok && getDirtyTs() === dirtyTs) clearDirty();
+      });
+    }
     return result;
   } catch {
     if (attempt === 0) {
@@ -3101,12 +3119,50 @@ async function loadStoreData(attempt = 0) {
 
 async function saveStoreData_raw(payload) {
   try {
-    await fetch(JSONBIN_URL, {
+    const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
       body: JSON.stringify(payload),
     });
-  } catch (e) { console.error('Store data save failed', e); }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return true;
+  } catch (e) { console.error('Store data save failed', e); return false; }
+}
+
+// Unsynced-edit marker: set on every local edit, cleared only once JSONBin confirms the write.
+// Survives page reloads so an edit whose upload was killed (iOS backgrounding) isn't lost.
+const LS_DIRTY_KEY = 'sa_dirty';
+let _editSeq = 0;
+let _cloudSaving = null;
+let _cloudSavePending = false;
+
+function getDirtyTs() {
+  try { return Number(localStorage.getItem(LS_DIRTY_KEY)) || 0; } catch (_) { return 0; }
+}
+function clearDirty() {
+  try { localStorage.removeItem(LS_DIRTY_KEY); } catch (_) {}
+}
+
+function queueCloudSave() {
+  _editSeq++;
+  try { localStorage.setItem(LS_DIRTY_KEY, String(Date.now())); } catch (_) {}
+  return flushCloudSave();
+}
+
+// One PUT in flight at a time, always sending the latest state, so rapid edits can't land out of order.
+function flushCloudSave() {
+  if (_cloudSaving) { _cloudSavePending = true; return _cloudSaving; }
+  _cloudSaving = (async () => {
+    do {
+      _cloudSavePending = false;
+      const sentTs = getDirtyTs();
+      const ok = await saveStoreData_raw({ ...currentPayload(), editTs: sentTs || Date.now() });
+      if (!ok) break;
+      if (!_cloudSavePending && getDirtyTs() === sentTs) clearDirty();
+    } while (_cloudSavePending);
+    _cloudSaving = null;
+  })();
+  return _cloudSaving;
 }
 
 function currentPayload() {
@@ -3115,12 +3171,12 @@ function currentPayload() {
 
 async function saveStoreTags() {
   saveLocal();
-  await saveStoreData_raw(currentPayload());
+  await queueCloudSave();
 }
 
 async function saveArchived() {
   saveLocal();
-  await saveStoreData_raw(currentPayload());
+  await queueCloudSave();
 }
 
 // Saves only the shipment field — reads remote first so tags/purchases aren't overwritten
@@ -4299,7 +4355,7 @@ async function toggleManualSale(itemId) {
   if (manualSales[itemId]) {
     delete manualSales[itemId];
     saveLocal();
-    saveStoreData_raw(currentPayload());
+    queueCloudSave();
     renderGrid(sortItems(items, $('sortSelect').value));
     renderFilterChips();
     return;
@@ -4319,7 +4375,7 @@ function applyManualSale(itemId, stores) {
   const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
   manualSales[itemId] = { stores, expiresMs: Date.now() + SEVEN_DAYS };
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderGrid(sortItems(items, $('sortSelect').value));
   renderFilterChips();
 }
@@ -4543,7 +4599,7 @@ function editInboundOverride(itemId) {
   if (item.currentStock === 0)            item.urgency = 'critical';
   else if (onOrder < item.parLevel * 0.5) item.urgency = 'low';
   else                                    item.urgency = 'ok';
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   saveLocal();
   renderGrid(sortItems(items, $('sortSelect').value));
 }
@@ -4611,7 +4667,7 @@ function clearAllPurchases() {
   if (!confirm(`Clear all ${Object.keys(purchases).length} bought marks?`)) return;
   purchases = {};
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderClearBoughtBtn();
   closeBoughtList();
   renderGrid(sortItems(items, $('sortSelect').value));
@@ -4707,7 +4763,7 @@ function confirmPurchase() {
     weeklyList[buyingItemId] = { ...weeklyList[buyingItemId], qty };
   }
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   refreshPurchaseUI(buyingItemId);
   renderClearBoughtBtn();
   renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
@@ -4720,7 +4776,7 @@ function unmarkPurchase() {
   if (!buyingItemId) return;
   delete purchases[buyingItemId];
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   refreshPurchaseUI(buyingItemId);
   renderClearBoughtBtn();
   renderSummary(activeFilter ? items.filter(x => (storeTags[x.itemId] || []).includes(activeFilter) && !archivedIds.has(x.itemId)) : items);
@@ -4888,7 +4944,7 @@ function adjustShoppingQty(itemId, delta, store) {
   if (purchases[itemId]) {
     purchases[itemId] = { qty: newQty, ts: purchases[itemId].ts };
     saveLocal();
-    saveStoreData_raw(currentPayload());
+    queueCloudSave();
     refreshPurchaseUI(itemId);
   }
 }
@@ -4902,7 +4958,7 @@ function toggleShoppingItem(itemId, store) {
     purchases[itemId] = { qty, ts: Date.now() };
   }
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
 
   // Update the row in shopping view
   const row = $('shoppingBody').querySelector(`[data-id="${CSS.escape(itemId)}"]`);
@@ -4987,7 +5043,7 @@ function toggleWeeklyList(itemId) {
   if (weeklyList[itemId]) {
     delete weeklyList[itemId];
     saveLocal();
-    saveStoreData_raw(currentPayload());
+    queueCloudSave();
     renderWeeklyListBtn();
     const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
     if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
@@ -5006,7 +5062,7 @@ function toggleWeeklyList(itemId) {
   const item = items.find(x => x.itemId === itemId);
   weeklyList[itemId] = { addedTs: Date.now(), name: item?.name, urgency: item?.urgency };
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListBtn();
   const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
   if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
@@ -5068,7 +5124,7 @@ function confirmWLStorePicker() {
     ...(excluded.length ? { excludedStores: excluded } : {}),
   };
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListBtn();
   const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
   if (card) { const btn = card.querySelector('.weekly-add-btn'); if (btn) btn.outerHTML = weeklyListAddBtnHtml(itemId, false); }
@@ -5094,7 +5150,7 @@ function openWeeklyList() {
     }
     if (updated !== weeklyList[itemId]) weeklyList[itemId] = updated;
   });
-  if (backfilled) { saveLocal(); saveStoreData_raw(currentPayload()); }
+  if (backfilled) { saveLocal(); queueCloudSave(); }
   renderWeeklyListModal();
   $('weeklyListOverlay').classList.add('open');
   lockBodyScroll();
@@ -5304,7 +5360,7 @@ function toggleWLItem(itemId) {
     }
   }
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
 
   const isBought = !!weeklyList[itemId]?.done;
   document.querySelectorAll(`[data-wl-id="${CSS.escape(itemId)}"]`).forEach(row => {
@@ -5339,7 +5395,7 @@ function adjustWLQty(itemId, delta) {
       : items);
   }
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
 }
 
 function toggleWLSale(itemId, store) {
@@ -5367,7 +5423,7 @@ function toggleWLSale(itemId, store) {
   }
 
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListModal();
   renderFilterChips();
   renderGrid(sortItems(items, $('sortSelect').value));
@@ -5376,7 +5432,7 @@ function toggleWLSale(itemId, store) {
 function removeFromWeeklyList(itemId) {
   delete weeklyList[itemId];
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListBtn();
   renderWeeklyListModal();
   const card = document.querySelector(`.card[data-id="${CSS.escape(itemId)}"]`);
@@ -5417,7 +5473,7 @@ function excludeFromStore(itemId, store) {
   }
 
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListBtn();
   renderWeeklyListModal();
 }
@@ -5429,7 +5485,7 @@ function clearWeeklyList() {
   weeklyList = {};
   wlQtys = {};
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListBtn();
   renderWeeklyListModal();
   renderGrid(sortItems(items, $('sortSelect').value));
@@ -5484,14 +5540,21 @@ function updateWLNote(itemId, note) {
   if (!weeklyList[itemId]) return;
   weeklyList[itemId] = { ...weeklyList[itemId], note };
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
 }
 
-async function syncFromJSONBin() {
-  const btn = $('wlSyncBtn');
+async function syncFromJSONBin({ silent = false } = {}) {
+  const btn = silent ? null : $('wlSyncBtn');
   if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
   try {
+    if (getDirtyTs()) await flushCloudSave();
+    const seqBefore = _editSeq;
     const data = await loadStoreData();
+    if (_editSeq !== seqBefore) return; // user edited while loading — keep their local changes
+    if (silent) {
+      const snap = d => JSON.stringify([d.tags, d.archived, d.purchases, d.manualSales, d.inboundOverrides, d.weeklyList]);
+      if (snap(data) === snap({ tags: storeTags, archived: [...archivedIds], purchases, manualSales, inboundOverrides, weeklyList })) return;
+    }
     storeTags        = data.tags || {};
     archivedIds      = new Set(data.archived || []);
     purchases        = data.purchases || {};
@@ -5505,9 +5568,10 @@ async function syncFromJSONBin() {
     renderFilterChips();
     renderGrid(sortItems(items, $('sortSelect').value));
     renderSummary(items);
-    toast('Synced!');
+    renderClearBoughtBtn();
+    if (!silent) toast('Synced!');
   } catch (e) {
-    toast('Sync failed — check connection', true);
+    if (!silent) toast('Sync failed — check connection', true);
   } finally {
     if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
   }
@@ -5679,6 +5743,7 @@ function confirmBuildFromSales() {
     const existing = weeklyList[itemId];
     const item = items.find(x => x.itemId === itemId);
     weeklyList[itemId] = {
+      ...existing,
       addedTs: existing?.addedTs || now,
       note: _buildNotes[itemId] ?? existing?.note ?? '',
       qty: _buildQtys[itemId] ?? existing?.qty,
@@ -5688,7 +5753,7 @@ function confirmBuildFromSales() {
     if (_buildQtys[itemId]) wlQtys[itemId] = _buildQtys[itemId];
   });
   saveLocal();
-  saveStoreData_raw(currentPayload());
+  queueCloudSave();
   renderWeeklyListBtn();
   renderWeeklyListModal(); // refresh the list that's open behind the build overlay
   const count = _buildSelected.size;
@@ -5961,8 +6026,8 @@ async function generate(colMap = {}) {
         wfsInventoryData = {};
         wfsInventoryTs   = Date.now();
         invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound, g: e.gtin || '' }; });
-        saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(() =>
-          toast('WFS inventory synced to cloud ☁️')
+        saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(ok =>
+          ok ? toast('WFS inventory synced to cloud ☁️') : toast('WFS inventory cloud sync failed — try Generate again', true)
         );
         _wfsSourceType = 'file';
         _wfsSourceTs   = wfsInventoryTs;
@@ -6288,6 +6353,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('sheetUrl').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
   $('storeTextInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmStoreTag(); });
   $('buyQtyInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmPurchase(); });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!items.length) return;
+    if (document.visibilityState === 'hidden') {
+      if (getDirtyTs()) flushCloudSave();
+    } else {
+      syncFromJSONBin({ silent: true });
+    }
+  });
 
   window.addEventListener('scroll', () => {
     $('scrollTopBtn').classList.toggle('visible', window.scrollY > 400);
