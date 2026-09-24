@@ -3008,14 +3008,19 @@ const LS_BACKUP_KEY = 'sa_backup';
 
 function saveLocal() {
   try {
+    const hasInv = wfsInventoryData && Object.keys(wfsInventoryData).length;
+    const prev = hasInv ? null : loadLocal();
     localStorage.setItem(LS_BACKUP_KEY, JSON.stringify({
       tags: storeTags,
       archived: [...archivedIds],
       purchases,
       shipment: Object.fromEntries(shipNameMap),
+      shipmentFiles: shipFileMap,
       manualSales,
       inboundOverrides,
       weeklyList,
+      wfsInventory: hasInv ? wfsInventoryData : (prev?.wfsInventory || {}),
+      wfsInventoryTs: hasInv ? wfsInventoryTs : (prev?.wfsInventoryTs || null),
     }));
   } catch (_) {}
 }
@@ -3031,7 +3036,8 @@ function loadLocal() {
 async function loadStoreData(attempt = 0) {
   try {
     const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY }
+      headers: { 'X-Master-Key': JSONBIN_KEY },
+      signal: AbortSignal.timeout(7000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -3104,16 +3110,16 @@ async function loadStoreData(attempt = 0) {
       });
     }
     return result;
-  } catch {
-    if (attempt === 0) {
+  } catch (e) {
+    if (attempt === 0 && e?.name !== 'TimeoutError') {
       await new Promise(r => setTimeout(r, 1200));
       return loadStoreData(1);
     }
     const local = loadLocal();
     if (local?.tags && Object.keys(local.tags).length) {
-      toast('JSONBin unavailable — loaded from local backup', true);
+      toast('Cloud sync unavailable — using this device\'s saved data', true);
     }
-    return { tags: local?.tags || {}, archived: local?.archived || [], purchases: local?.purchases || {}, shipment: local?.shipment || {}, manualSales: local?.manualSales || {}, inboundOverrides: local?.inboundOverrides || {}, weeklyList: local?.weeklyList || {} };
+    return { tags: local?.tags || {}, archived: local?.archived || [], purchases: local?.purchases || {}, shipment: local?.shipment || {}, shipmentFiles: local?.shipmentFiles || {}, manualSales: local?.manualSales || {}, inboundOverrides: local?.inboundOverrides || {}, weeklyList: local?.weeklyList || {}, wfsInventory: local?.wfsInventory || {}, wfsInventoryTs: local?.wfsInventoryTs || null, offline: true };
   }
 }
 
@@ -3123,6 +3129,7 @@ async function saveStoreData_raw(payload) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return true;
@@ -3183,7 +3190,8 @@ async function saveArchived() {
 // Safe to call before generate() when storeTags/purchases may not be loaded yet
 async function saveShipmentToCloud() {
   try {
-    const res = await fetch(JSONBIN_URL + '/latest', { headers: { 'X-Master-Key': JSONBIN_KEY } });
+    const res = await fetch(JSONBIN_URL + '/latest', { headers: { 'X-Master-Key': JSONBIN_KEY }, signal: AbortSignal.timeout(7000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const current = data.record || {};
     await saveStoreData_raw({ ...current, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap });
@@ -5550,6 +5558,7 @@ async function syncFromJSONBin({ silent = false } = {}) {
     if (getDirtyTs()) await flushCloudSave();
     const seqBefore = _editSeq;
     const data = await loadStoreData();
+    if (data.offline) { if (!silent) toast('Cloud sync unavailable — changes are saved on this device and will upload later', true); return; }
     if (_editSeq !== seqBefore) return; // user edited while loading — keep their local changes
     if (silent) {
       const snap = d => JSON.stringify([d.tags, d.archived, d.purchases, d.manualSales, d.inboundOverrides, d.weeklyList]);
