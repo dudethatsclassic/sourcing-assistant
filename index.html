@@ -352,6 +352,8 @@
       padding-left: 2px;
     }
     .inv-source-row strong { color: var(--text); font-weight: 600; }
+    .inv-source-row > div + div { margin-top: 2px; }
+    .inv-source-stale { color: var(--orange); font-weight: 600; }
 
     /* ── Toolbar ── */
     .toolbar {
@@ -3476,6 +3478,8 @@ let wfsIsXlsx       = false;  // true when WFS source is xlsx (inbound column is
 let _wfsSourceType  = null;   // 'file' | 'cloud' | 'github' | null
 let _wfsSourceName  = '';
 let _wfsSourceTs    = null;
+let _ordersLatestMs = null;   // newest order date in the sales file
+let _ordersSource   = '';
 let wfsInventoryData = {};    // compact {itemId:{s,i}} — synced to cloud for cross-device use
 let wfsInventoryTs   = null;  // timestamp of last xlsx upload
 let sbRows   = null;
@@ -3680,26 +3684,32 @@ function formatAge(ts) {
   return `${Math.round(hrs / 24)}d`;
 }
 
+const ORDERS_STALE_DAYS = 4;
+
 function renderInvSourceBadge() {
   const el = $('invSourceRow');
   if (!el) return;
-  if (!_wfsSourceType) { el.style.display = 'none'; return; }
-  let icon, text;
-  if (_wfsSourceType === 'file') {
+  const lines = [];
+  if (_wfsSourceType) {
     const age = _wfsSourceTs ? formatAge(_wfsSourceTs) : null;
-    icon = '📦';
-    text = `<strong>${_wfsSourceName}</strong> · ${age ? `uploaded ${age} ago` : 'just uploaded'}`;
-  } else if (_wfsSourceType === 'cloud') {
-    const age = _wfsSourceTs ? formatAge(_wfsSourceTs) : null;
-    icon = '☁';
-    text = `WFS Inventory · ${age ? `synced ${age} ago` : 'synced from cloud'}`;
-  } else {
-    icon = '🔗';
-    text = 'WFS Inventory · loaded from GitHub';
+    if (_wfsSourceType === 'file') {
+      lines.push(`📦 <strong>${escHtml(_wfsSourceName)}</strong> · ${age ? `uploaded ${age} ago` : 'just uploaded'}`);
+    } else if (_wfsSourceType === 'cloud') {
+      lines.push(`☁ WFS Inventory · ${age ? `synced ${age} ago` : 'synced from cloud'}`);
+    } else {
+      lines.push('🔗 WFS Inventory · loaded from GitHub');
+    }
   }
-  el.style.display = '';
-  el.textContent = '';
-  el.innerHTML = `${icon} ${text}`;
+  if (_ordersLatestMs) {
+    // Order dates are date-only strings parsed as UTC midnight — format in UTC so the day doesn't shift
+    const label = new Date(_ordersLatestMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const days  = Math.floor((Date.now() - _ordersLatestMs) / 86400000);
+    lines.push(days > ORDERS_STALE_DAYS
+      ? `<span class="inv-source-stale">⚠ Orders only through ${label} (${days} days old) · upload a fresh export</span>`
+      : `📊 Orders through ${label} · ${_ordersSource}`);
+  }
+  el.style.display = lines.length ? '' : 'none';
+  el.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
 }
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
@@ -3963,6 +3973,7 @@ function parseSalesRows(rows) {
 
     map.set(id, { itemId: id, weeklySold, name: entry.name, isNew });
   });
+  map.latestMs = allDates.length ? globalMaxMs : null;
   return map;
 }
 
@@ -6106,8 +6117,11 @@ async function generate(colMap = {}) {
         $('sbDrop').classList.add('loaded');
       }
     }
+    _ordersLatestMs = null;
     if (sbSource) {
       velMap = parseSalesRows(sbSource);
+      _ordersLatestMs = velMap.latestMs ?? null;
+      _ordersSource   = sbRows ? 'uploaded file' : 'GitHub';
     }
 
     // 4. Extended history — optional, improves velocity accuracy for slow/established items
@@ -6288,6 +6302,7 @@ function clearAll() {
   items    = [];
   wfsColMap = {};
   _wfsSourceType = null;
+  _ordersLatestMs = null;
   renderInvSourceBadge();
 
   ['wfsFile', 'sbFile', 'histFile', 'shipFile'].forEach(id => { $(id).value = ''; });
