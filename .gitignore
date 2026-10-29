@@ -1,0 +1,5 @@
+# Seller Center exports contain customer ship-to data — the repo is public.
+# Orders sync through the private Worker (drop the file into the app instead).
+*.xlsx
+*.xls
+inventoryHealth.csv
