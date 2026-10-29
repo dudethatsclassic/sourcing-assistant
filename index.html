@@ -3011,8 +3011,6 @@ async function fetchGitHubOrders() {
   return rows.length ? rows : null;
 }
 
-const LS_TAGS_KEY = 'sa_store_tags_backup';
-
 const LS_BACKUP_KEY = 'sa_backup';
 
 function saveLocal() {
@@ -3036,8 +3034,7 @@ function saveLocal() {
 
 function loadLocal() {
   try {
-    const raw = localStorage.getItem(LS_BACKUP_KEY)
-      || localStorage.getItem(LS_TAGS_KEY); // migrate old key
+    const raw = localStorage.getItem(LS_BACKUP_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (_) { return null; }
 }
@@ -6408,6 +6405,7 @@ function clearAll() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  try { ['sa_base', 'sa_store_tags_backup'].forEach(k => localStorage.removeItem(k)); } catch (_) {} // JSONBin-era keys
   loadPrefs();
   updateSettingsBtn(); // show green gear if Kroger creds are saved
   checkGitHubFiles(); // non-blocking — updates drop zones if GitHub files exist
