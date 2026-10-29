@@ -2739,7 +2739,7 @@
       <div class="weekly-list-title">📋 Weekly List</div>
       <div class="wl-header-actions">
         <button class="wl-build-btn" onclick="openBuildFromSales()">📅 From Sales</button>
-        <button class="wl-sync-btn" id="wlSyncBtn" onclick="syncFromJSONBin()" title="Sync from cloud">↻</button>
+        <button class="wl-sync-btn" id="wlSyncBtn" onclick="syncFromCloud()" title="Sync from cloud">↻</button>
         <button class="wl-copy-btn" onclick="copyWeeklyList()">Copy</button>
         <button class="wl-done-btn" onclick="closeWeeklyList()">Done</button>
       </div>
@@ -2855,11 +2855,14 @@
 <!-- ── Settings Modal ── -->
 <div class="settings-backdrop" id="settingsBackdrop" onclick="closeSettings(event)">
   <div class="settings-modal" onclick="event.stopPropagation()">
-    <div class="settings-title">⚙️ API Settings</div>
-    <div class="settings-subtitle">Kroger credentials for Harris Teeter live sale data.<br>Stored on this device only — never sent to GitHub.</div>
-    <div class="settings-label">Client ID</div>
+    <div class="settings-title">⚙️ Settings</div>
+    <div class="settings-subtitle">Stored on this device only — never sent to GitHub.</div>
+    <div class="settings-label">Cloud sync token</div>
+    <input class="settings-input" id="settingsSyncToken" type="password" placeholder="Paste your sync token…" autocomplete="off" spellcheck="false">
+    <div class="settings-subtitle" style="margin:-4px 0 12px">Syncs tags, weekly list and bought items between your devices. Use the same token on each device.</div>
+    <div class="settings-label">Kroger Client ID <span style="font-weight:400;color:var(--muted)">(Harris Teeter sales)</span></div>
     <input class="settings-input" id="settingsClientId" type="password" placeholder="Paste your Client ID…" autocomplete="off" spellcheck="false">
-    <div class="settings-label">Client Secret</div>
+    <div class="settings-label">Kroger Client Secret</div>
     <input class="settings-input" id="settingsClientSecret" type="password" placeholder="Paste your Client Secret…" autocomplete="off" spellcheck="false">
     <div class="settings-note">
       🔒 Saved to your browser's localStorage — not in the code, not on GitHub. Clear browser data to remove them.
@@ -2878,7 +2881,6 @@
 <script>
 'use strict';
 
-// ─── JSONBin (store tags sync) ────────────────────────────────────────────────
 // ─── Store Logo Map ───────────────────────────────────────────────────────────
 const STORE_DOMAINS = {
   'target':           'target.com',
@@ -2940,8 +2942,13 @@ function storeLogoImg(name, size = 16) {
   return `<img src="${url}" style="width:${size}px;height:${size}px;border-radius:3px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`;
 }
 
-const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/6a1c7f3cddf5aa59f77c95a9';
-const JSONBIN_KEY = '$2a$10$BcDWdgwfihwP/01f64ZXlOcF6zHcSSdC..Uh80lZ8jyulxqA8zRmS';
+// ─── Cloud sync (Cloudflare Worker + KV — source in sync-worker.js) ──────────
+// The sync token is stored in localStorage only — never in code. Enter it in ⚙️ Settings.
+const SYNC_URL      = 'https://sourcebuddy-sync.natescottsmith.workers.dev/state';
+const SYNC_LS_TOKEN = 'sourcing_sync_token';
+function syncToken() {
+  try { return localStorage.getItem(SYNC_LS_TOKEN) || ''; } catch (_) { return ''; }
+}
 
 // ─── GitHub Auto-Fetch ────────────────────────────────────────────────────────
 const GITHUB_RAW = 'https://raw.githubusercontent.com/dudethatsclassic/sourcing-assistant/main/data';
@@ -3035,121 +3042,158 @@ function loadLocal() {
   } catch (_) { return null; }
 }
 
-async function loadStoreData(attempt = 0) {
-  try {
-    const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_KEY },
-      signal: AbortSignal.timeout(7000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const rawTags = data.record?.tags || {};
-    const rawArchived = data.record?.archived || [];
-    const rawPurchases = data.record?.purchases || {};
-    const rawShipment = data.record?.shipment || {};
-    const rawManualSales = data.record?.manualSales || {};
-    const rawInboundOverrides = data.record?.inboundOverrides || {};
-    const rawWeeklyList = data.record?.weeklyList || {};
-    const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
-    const cleanInboundOverrides = {};
-    Object.entries(rawInboundOverrides).forEach(([id, val]) => {
-      if (typeof val === 'number') {
-        cleanInboundOverrides[id] = { value: val, ts: Date.now() }; // migrate old format
-      } else if (val?.ts && (Date.now() - val.ts) < SIXTY_DAYS) {
-        cleanInboundOverrides[id] = val;
-      }
-    });
-
-    // Migrate old single-string tag format to array
-    const tags = {};
-    Object.entries(rawTags).forEach(([id, val]) => {
-      tags[id] = Array.isArray(val) ? val : [val];
-    });
-
-    // Purge expired manual sales + migrate old format (was just a timestamp number)
-    const now = Date.now();
-    const cleanManualSales = {};
-    Object.entries(rawManualSales).forEach(([id, val]) => {
-      if (typeof val === 'number') {
-        // Old format: migrate — no store info known, use empty array (= all stores)
-        if (val > now) cleanManualSales[id] = { stores: [], expiresMs: val };
-      } else if (val?.expiresMs > now) {
-        cleanManualSales[id] = val;
-      }
-    });
-
-    // Guard: if remote has far fewer tags than local backup, restore from backup
-    const local = loadLocal();
-    const localTagCount  = local?.tags  ? Object.keys(local.tags).length  : 0;
-    const remoteTagCount = Object.keys(tags).length;
-    if (local?.tags && localTagCount > remoteTagCount + 2) {
-      console.warn(`JSONBin has ${remoteTagCount} tags but local has ${localTagCount} — restoring from backup.`);
-      const restored = { tags: local.tags, archived: local.archived || [], purchases: local.purchases || {}, shipment: local.shipment || {}, shipmentFiles: local.shipmentFiles || {}, manualSales: local.manualSales || {}, inboundOverrides: local.inboundOverrides || {}, weeklyList: local.weeklyList || {}, wfsInventory: local.wfsInventory || {}, wfsInventoryTs: local.wfsInventoryTs || null };
-      saveStoreData_raw(restored);
-      return restored;
-    }
-
-    const rawShipmentFiles  = data.record?.shipmentFiles  || {};
-    const rawWfsInventory   = data.record?.wfsInventory   || {};
-    const rawWfsInventoryTs = data.record?.wfsInventoryTs || null;
-    const remoteEditTs = data.record?.editTs || 0;
-    const result = { tags, archived: rawArchived, purchases: rawPurchases, shipment: rawShipment, shipmentFiles: rawShipmentFiles, manualSales: cleanManualSales, inboundOverrides: cleanInboundOverrides, weeklyList: rawWeeklyList, wfsInventory: rawWfsInventory, wfsInventoryTs: rawWfsInventoryTs, editTs: remoteEditTs };
-
-    // This device has edits the cloud never received. Local wins only if the cloud hasn't
-    // changed since this device last synced; otherwise the cloud copy is authoritative.
-    const dirtyTs = getDirtyTs();
-    if (local && dirtyTs) {
-      if (getBaseTs() === remoteEditTs) {
-        Object.assign(result, {
-          tags: local.tags || result.tags,
-          archived: local.archived || result.archived,
-          purchases: local.purchases || {},
-          manualSales: local.manualSales || {},
-          inboundOverrides: local.inboundOverrides || {},
-          weeklyList: local.weeklyList || {},
-        });
-        saveStoreData_raw({ ...data.record, ...result, editTs: dirtyTs }).then(ok => {
-          if (!ok) return;
-          setBaseTs(dirtyTs);
-          if (getDirtyTs() === dirtyTs) clearDirty();
-        });
-      } else {
-        clearDirty();
-      }
-    }
-    return result;
-  } catch (e) {
-    if (attempt === 0 && e?.name !== 'TimeoutError') {
-      await new Promise(r => setTimeout(r, 1200));
-      return loadStoreData(1);
-    }
-    const local = loadLocal();
-    if (local?.tags && Object.keys(local.tags).length) {
-      toast('Cloud sync unavailable — using this device\'s saved data', true);
-    }
-    return { tags: local?.tags || {}, archived: local?.archived || [], purchases: local?.purchases || {}, shipment: local?.shipment || {}, shipmentFiles: local?.shipmentFiles || {}, manualSales: local?.manualSales || {}, inboundOverrides: local?.inboundOverrides || {}, weeklyList: local?.weeklyList || {}, wfsInventory: local?.wfsInventory || {}, wfsInventoryTs: local?.wfsInventoryTs || null, offline: true };
-  }
+async function fetchRemoteRecord() {
+  const token = syncToken();
+  if (!token) { const e = new Error('No sync token'); e.name = 'NoTokenError'; throw e; }
+  const res = await fetch(SYNC_URL, {
+    headers: { 'X-Sync-Token': token },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(7000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()).record || null;
 }
 
-async function saveStoreData_raw(payload) {
+// → { ok: true } | { conflict: <cloud record> } | { ok: false }
+async function putRemoteRecord(record, baseEditTs) {
+  const token = syncToken();
+  if (!token) return { ok: false };
   try {
-    const res = await fetch(JSONBIN_URL, {
+    const res = await fetch(SYNC_URL, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_KEY },
-      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json', 'X-Sync-Token': token },
+      body: JSON.stringify({ record, baseEditTs }),
       signal: AbortSignal.timeout(15000),
     });
+    if (res.status === 409) return { conflict: (await res.json()).record || {} };
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return true;
-  } catch (e) { console.error('Store data save failed', e); return false; }
+    return { ok: true };
+  } catch (e) { console.error('Cloud save failed', e); return { ok: false }; }
 }
 
-// Unsynced-edit marker: set on every local edit, cleared only once JSONBin confirms the write.
+// Snapshot of the cloud copy this device last synced with — the "base" for 3-way merges.
+const LS_SNAPSHOT_KEY = 'sa_sync_base';
+const SYNC_MAP_FIELDS = ['tags', 'purchases', 'manualSales', 'inboundOverrides', 'weeklyList', 'shipment', 'shipmentFiles'];
+
+function getSnapshot() {
+  try { return JSON.parse(localStorage.getItem(LS_SNAPSHOT_KEY)) || null; } catch (_) { return null; }
+}
+function setSnapshot(rec) {
+  if (!rec) return;
+  const snap = { editTs: rec.editTs || 0, archived: rec.archived || [] };
+  SYNC_MAP_FIELDS.forEach(f => { snap[f] = rec[f] || {}; });
+  try { localStorage.setItem(LS_SNAPSHOT_KEY, JSON.stringify(snap)); } catch (_) {}
+}
+
+// Per-item 3-way merge: keep the cloud's value unless this device changed that item since
+// its last sync. With no base (device never synced), local can only add items, never
+// overwrite or delete — so an old backup can't clobber newer data from another device.
+function mergeMaps(base, local = {}, remote = {}) {
+  if (!base) return { ...local, ...remote };
+  const out = { ...remote };
+  new Set([...Object.keys(base), ...Object.keys(local)]).forEach(k => {
+    if (JSON.stringify(local[k]) === JSON.stringify(base[k])) return;
+    if (local[k] === undefined) delete out[k]; else out[k] = local[k];
+  });
+  return out;
+}
+function mergeRecords(base, local, remote) {
+  const out = { ...remote };
+  SYNC_MAP_FIELDS.forEach(f => { out[f] = mergeMaps(base ? (base[f] || {}) : null, local?.[f], remote?.[f]); });
+  const asMap = a => Object.fromEntries((a || []).map(id => [id, 1]));
+  out.archived = Object.keys(mergeMaps(base ? asMap(base.archived) : null, asMap(local?.archived), asMap(remote?.archived)));
+  if ((local?.wfsInventoryTs || 0) > (remote?.wfsInventoryTs || 0)) {
+    out.wfsInventory   = local.wfsInventory;
+    out.wfsInventoryTs = local.wfsInventoryTs;
+  }
+  return out;
+}
+
+function isEmptyRecord(r) {
+  return !r || (!Object.keys(r.tags || {}).length && !Object.keys(r.weeklyList || {}).length && !Object.keys(r.wfsInventory || {}).length);
+}
+
+// Clean up old formats and expired entries
+function normalizeRecord(r = {}) {
+  const now = Date.now();
+  const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
+  const tags = {};
+  Object.entries(r.tags || {}).forEach(([id, val]) => { tags[id] = Array.isArray(val) ? val : [val]; });
+  const inboundOverrides = {};
+  Object.entries(r.inboundOverrides || {}).forEach(([id, val]) => {
+    if (typeof val === 'number') inboundOverrides[id] = { value: val, ts: now };
+    else if (val?.ts && (now - val.ts) < SIXTY_DAYS) inboundOverrides[id] = val;
+  });
+  const manualSales = {};
+  Object.entries(r.manualSales || {}).forEach(([id, val]) => {
+    if (typeof val === 'number') { if (val > now) manualSales[id] = { stores: [], expiresMs: val }; }
+    else if (val?.expiresMs > now) manualSales[id] = val;
+  });
+  return {
+    tags, inboundOverrides, manualSales,
+    archived:       r.archived       || [],
+    purchases:      r.purchases      || {},
+    shipment:       r.shipment       || {},
+    shipmentFiles:  r.shipmentFiles  || {},
+    weeklyList:     r.weeklyList     || {},
+    wfsInventory:   r.wfsInventory   || {},
+    wfsInventoryTs: r.wfsInventoryTs || null,
+    editTs:         r.editTs         || 0,
+  };
+}
+
+// Returns normalized state. `_synced` is the cloud copy the state now matches (for setSnapshot);
+// `offline` means the cloud couldn't be reached and this device's saved copy was used.
+async function loadStoreData({ quiet = false } = {}, attempt = 0) {
+  let remote;
+  try {
+    remote = await fetchRemoteRecord();
+  } catch (e) {
+    if (attempt === 0 && !['TimeoutError', 'NoTokenError'].includes(e?.name) && e?.message !== 'HTTP 401') {
+      await new Promise(r => setTimeout(r, 1200));
+      return loadStoreData({ quiet }, 1);
+    }
+    if (!quiet) {
+      toast(e?.name === 'NoTokenError' ? 'Cloud sync is off — add your sync token in ⚙️ Settings'
+          : e?.message === 'HTTP 401' ? 'Sync token was rejected — check it in ⚙️ Settings'
+          : 'Cloud sync unavailable — using this device\'s saved data', true);
+    }
+    return { ...normalizeRecord(loadLocal() || {}), offline: true };
+  }
+
+  const local = loadLocal();
+  const dirtyAtStart = getDirtyTs();
+  let record = remote || {};
+  let push = false;
+  if (isEmptyRecord(remote) && !isEmptyRecord(local)) {
+    record = { ...(remote || {}), ...local };               // fresh cloud store — seed it from this device
+    push = true;
+  } else if (local && dirtyAtStart) {
+    record = mergeRecords(getSnapshot(), local, remote || {}); // this device has edits the cloud never got
+    push = true;
+  }
+
+  let synced = remote;
+  if (push) {
+    const sent = { ...record, editTs: Date.now() };
+    const r = await putRemoteRecord(sent, remote?.editTs || 0);
+    if (r.ok) {
+      record = synced = sent;
+      if (getDirtyTs() === dirtyAtStart) clearDirty();
+    }
+  }
+  return { ...normalizeRecord(record), _synced: synced };
+}
+
+// Unsynced-edit marker: set on every local edit, cleared only once the cloud confirms the write.
 // Survives page reloads so an edit whose upload was killed (iOS backgrounding) isn't lost.
 const LS_DIRTY_KEY = 'sa_dirty';
+const SAVE_DEBOUNCE_MS = 1500;
 let _editSeq = 0;
 let _cloudSaving = null;
 let _cloudSavePending = false;
+let _saveTimer = null;
+let _lastSyncMs = 0;
 
 function getDirtyTs() {
   try { return Number(localStorage.getItem(LS_DIRTY_KEY)) || 0; } catch (_) { return 0; }
@@ -3158,67 +3202,114 @@ function clearDirty() {
   try { localStorage.removeItem(LS_DIRTY_KEY); } catch (_) {}
 }
 
-// editTs of the cloud version this device's state is built on. Local edits may only
-// overwrite the cloud if it's still at this version — protects against pushing a stale
-// or empty offline backup over real data.
-const LS_BASE_KEY = 'sa_base';
-let _offlineState = false;
-function getBaseTs() {
-  try { const v = localStorage.getItem(LS_BASE_KEY); return v === null ? null : Number(v); } catch (_) { return null; }
-}
-function setBaseTs(ts) {
-  try { localStorage.setItem(LS_BASE_KEY, String(ts || 0)); } catch (_) {}
-}
-
+// Batch rapid edits (e.g. tapping + several times) into one save
 function queueCloudSave() {
   _editSeq++;
   try { localStorage.setItem(LS_DIRTY_KEY, String(Date.now())); } catch (_) {}
-  return flushCloudSave();
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(flushCloudSave, SAVE_DEBOUNCE_MS);
 }
 
-// One PUT in flight at a time, always sending the latest state, so rapid edits can't land out of order.
+// One save in flight at a time, always sending the latest state. Resolves true if the cloud has it.
 function flushCloudSave() {
-  if (_offlineState) return Promise.resolve(); // state came from offline backup — reconcile on next successful load instead
+  clearTimeout(_saveTimer);
+  _saveTimer = null;
   if (_cloudSaving) { _cloudSavePending = true; return _cloudSaving; }
   _cloudSaving = (async () => {
+    let ok = false;
     do {
       _cloudSavePending = false;
-      const sentTs = getDirtyTs();
-      const sentEditTs = sentTs || Date.now();
-      const ok = await saveStoreData_raw({ ...currentPayload(), editTs: sentEditTs });
-      if (!ok) break;
-      setBaseTs(sentEditTs);
-      if (!_cloudSavePending && getDirtyTs() === sentTs) clearDirty();
-    } while (_cloudSavePending);
+      ok = await pushLocalState();
+    } while (ok && _cloudSavePending);
     _cloudSaving = null;
+    return ok;
   })();
   return _cloudSaving;
+}
+
+async function pushLocalState() {
+  const dirtyAtStart = getDirtyTs();
+  let base = getSnapshot();
+  if (!Object.keys(storeTags).length && Object.keys(base?.tags || {}).length) {
+    console.warn('Skipping cloud save — app data not loaded yet');
+    return false;
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const sent = { ...currentPayload(), editTs: Date.now() };
+    const r = await putRemoteRecord(sent, base?.editTs || 0);
+    if (r.ok) {
+      setSnapshot(sent);
+      _lastSyncMs = Date.now();
+      if (getDirtyTs() === dirtyAtStart) clearDirty();
+      return true;
+    }
+    if (!r.conflict) return false;
+    // Another device saved first — fold its changes in alongside ours, then retry
+    applyState(normalizeRecord(mergeRecords(base, currentPayload(), r.conflict)));
+    base = r.conflict;
+    setSnapshot(base);
+  }
+  return false;
 }
 
 function currentPayload() {
   return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, manualSales, inboundOverrides, weeklyList, wfsInventory: wfsInventoryData, wfsInventoryTs };
 }
 
+// Replace in-memory synced state and refresh the UI
+function applyState(d) {
+  storeTags        = d.tags || {};
+  archivedIds      = new Set(d.archived || []);
+  purchases        = d.purchases || {};
+  manualSales      = d.manualSales || {};
+  inboundOverrides = d.inboundOverrides || {};
+  weeklyList       = d.weeklyList || {};
+  if (Object.keys(d.shipmentFiles || {}).length) {
+    shipFileMap = d.shipmentFiles;
+    recomputeShipNameMap();
+  } else {
+    shipFileMap = {};
+    shipNameMap = new Map(Object.entries(d.shipment || {}).map(([k, v]) => [k, Number(v)]));
+  }
+  if (Object.keys(d.wfsInventory || {}).length) {
+    wfsInventoryData = d.wfsInventory;
+    wfsInventoryTs   = d.wfsInventoryTs;
+  }
+  wlQtys = {};
+  saveLocal();
+  if (!items.length) return;
+  renderWeeklyListBtn();
+  if ($('weeklyListOverlay').classList.contains('open')) renderWeeklyListModal();
+  renderFilterChips();
+  renderGrid(sortItems(items, $('sortSelect').value));
+  renderSummary(items);
+  renderClearBoughtBtn();
+}
+
 async function saveStoreTags() {
   saveLocal();
-  await queueCloudSave();
+  queueCloudSave();
 }
 
 async function saveArchived() {
   saveLocal();
-  await queueCloudSave();
+  queueCloudSave();
 }
 
-// Saves only the shipment field — reads remote first so tags/purchases aren't overwritten
-// Safe to call before generate() when storeTags/purchases may not be loaded yet
+// Shipment uploads can happen before Generate (app state not loaded yet) — in that case
+// patch only the shipment fields onto the cloud copy.
 async function saveShipmentToCloud() {
+  if (items.length) { queueCloudSave(); return flushCloudSave(); }
   try {
-    const res = await fetch(JSONBIN_URL + '/latest', { headers: { 'X-Master-Key': JSONBIN_KEY }, signal: AbortSignal.timeout(7000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const current = data.record || {};
-    await saveStoreData_raw({ ...current, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const remote = await fetchRemoteRecord() || {};
+      const sent = { ...remote, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, editTs: Date.now() };
+      const r = await putRemoteRecord(sent, remote.editTs || 0);
+      if (r.ok) return true;
+      if (!r.conflict) return false;
+    }
   } catch (e) { console.error('Shipment cloud save failed', e); }
+  return false;
 }
 
 // ─── Flipp Sale Data ─────────────────────────────────────────────────────────
@@ -3323,6 +3414,7 @@ function krogerCreds() {
 // ─── Settings Modal ───────────────────────────────────────────────────────────
 function openSettings() {
   const { id, sec } = krogerCreds();
+  $('settingsSyncToken').value    = syncToken();
   $('settingsClientId').value     = id;
   $('settingsClientSecret').value = sec;
   $('settingsBackdrop').classList.add('open');
@@ -3334,6 +3426,9 @@ function closeSettings(e) {
 function saveSettings() {
   const id    = $('settingsClientId').value.trim();
   const sec   = $('settingsClientSecret').value.trim();
+  const token = $('settingsSyncToken').value.trim();
+  const tokenChanged = token !== syncToken();
+  if (token) localStorage.setItem(SYNC_LS_TOKEN,  token); else localStorage.removeItem(SYNC_LS_TOKEN);
   if (id)    localStorage.setItem(KROGER_LS_ID,   id);    else localStorage.removeItem(KROGER_LS_ID);
   if (sec)   localStorage.setItem(KROGER_LS_SEC,  sec);   else localStorage.removeItem(KROGER_LS_SEC);
   updateSettingsBtn();
@@ -3341,6 +3436,7 @@ function saveSettings() {
   _krogerToken = null; _krogerTokenExp = 0; _krogerLocId = null;
   toast('✓ Settings saved');
   if (items.length) fetchSaleData(items);
+  if (items.length && token && tokenChanged) syncFromCloud();
 }
 function updateSettingsBtn() {
   const { id, sec } = krogerCreds();
@@ -5583,35 +5679,22 @@ function updateWLNote(itemId, note) {
   queueCloudSave();
 }
 
-async function syncFromJSONBin({ silent = false } = {}) {
+async function syncFromCloud({ silent = false } = {}) {
   const btn = silent ? null : $('wlSyncBtn');
   if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
   try {
     if (getDirtyTs()) await flushCloudSave();
     const seqBefore = _editSeq;
-    const data = await loadStoreData();
-    if (data.offline) { if (!silent) toast('Cloud sync unavailable — changes are saved on this device and will upload later', true); return; }
-    if (_editSeq !== seqBefore) return; // user edited while loading — keep their local changes
-    _offlineState = false;
-    setBaseTs(data.editTs);
+    const data = await loadStoreData({ quiet: silent });
+    if (data.offline) return;
+    if (_editSeq !== seqBefore) return; // user edited while loading — the pending save will merge
+    setSnapshot(data._synced);
+    _lastSyncMs = Date.now();
     if (silent) {
-      const snap = d => JSON.stringify([d.tags, d.archived, d.purchases, d.manualSales, d.inboundOverrides, d.weeklyList]);
-      if (snap(data) === snap({ tags: storeTags, archived: [...archivedIds], purchases, manualSales, inboundOverrides, weeklyList })) return;
+      const snap = d => JSON.stringify([d.tags, d.archived, d.purchases, d.manualSales, d.inboundOverrides, d.weeklyList, d.shipmentFiles]);
+      if (snap(data) === snap(currentPayload())) return;
     }
-    storeTags        = data.tags || {};
-    archivedIds      = new Set(data.archived || []);
-    purchases        = data.purchases || {};
-    manualSales      = data.manualSales || {};
-    inboundOverrides = data.inboundOverrides || {};
-    weeklyList       = data.weeklyList || {};
-    wlQtys           = {}; // clear pending adjustments — server is source of truth
-    saveLocal();
-    renderWeeklyListBtn();
-    renderWeeklyListModal();
-    renderFilterChips();
-    renderGrid(sortItems(items, $('sortSelect').value));
-    renderSummary(items);
-    renderClearBoughtBtn();
+    applyState(data);
     if (!silent) toast('Synced!');
   } catch (e) {
     if (!silent) toast('Sync failed — check connection', true);
@@ -6043,6 +6126,7 @@ async function generate(colMap = {}) {
 
     // 2. WFS — use manual upload, cloud sync, or auto-fetch from GitHub (in that order)
     let invMap = new Map();
+    let wfsJustUploaded = false;
     let wfsSource = wfsRows;
     const hasCloudInventory = storeData.wfsInventory && Object.keys(storeData.wfsInventory).length > 0;
     if (!wfsSource && !hasCloudInventory) {
@@ -6069,13 +6153,7 @@ async function generate(colMap = {}) {
         wfsInventoryData = {};
         wfsInventoryTs   = Date.now();
         invMap.forEach((e, id) => { wfsInventoryData[id] = { s: e.currentStock, i: e.inbound, g: e.gtin || '' }; });
-        if (storeData.offline) {
-          toast('Cloud unavailable — inventory saved on this device only. Generate again once sync is back.', true);
-        } else {
-          saveStoreData_raw({ ...storeData, wfsInventory: wfsInventoryData, wfsInventoryTs }).then(ok =>
-            ok ? toast('WFS inventory synced to cloud ☁️') : toast('WFS inventory cloud sync failed — try Generate again', true)
-          );
-        }
+        wfsJustUploaded = true;
         _wfsSourceType = 'file';
         _wfsSourceTs   = wfsInventoryTs;
         _wfsSourceName = $('wfsName').textContent.replace(/^[✓✔]\s*/, '');
@@ -6153,8 +6231,8 @@ async function generate(colMap = {}) {
     manualSales      = storeData.manualSales || {};
     inboundOverrides = storeData.inboundOverrides || {};
     weeklyList       = storeData.weeklyList || {};
-    _offlineState    = !!storeData.offline;
-    if (!storeData.offline) setBaseTs(storeData.editTs);
+    if (storeData._synced) setSnapshot(storeData._synced);
+    if (!storeData.offline) _lastSyncMs = Date.now();
     saveLocal();
     renderWeeklyListBtn();
 
@@ -6184,6 +6262,13 @@ async function generate(colMap = {}) {
     // Apply inbound shipment data (in-transit units not yet checked in to WFS).
     // Uses Math.max so xlsx inbound isn't double-counted — fills gaps for new items the xlsx hasn't caught yet.
     if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
+
+    if (wfsJustUploaded) {
+      queueCloudSave();
+      flushCloudSave().then(ok => ok
+        ? toast('WFS inventory synced to cloud ☁️')
+        : toast('Inventory saved on this device — it will sync once cloud sync is available', true));
+    }
 
     // Show results, collapse setup panel
     $('emptyState').style.display  = 'none';
@@ -6382,7 +6467,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : `✓ ${count} shipment files loaded`;
           shipDropEl.classList.add('loaded');
           saveLocal();
-          saveShipmentToCloud().then(() => toast('Shipment data synced to cloud ☁️'));
+          saveShipmentToCloud().then(ok => ok ? toast('Shipment data synced to cloud ☁️') : toast('Shipment saved on this device — it will sync once cloud sync is available', true));
         }
       };
       reader.readAsText(file);
@@ -6407,14 +6492,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $('storeTextInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmStoreTag(); });
   $('buyQtyInput').addEventListener('keydown', e => { if (e.key === 'Enter') confirmPurchase(); });
 
+  const RESUME_SYNC_MIN_MS = 60 * 1000;
   document.addEventListener('visibilitychange', () => {
     if (!items.length) return;
     if (document.visibilityState === 'hidden') {
       if (getDirtyTs()) flushCloudSave();
-    } else {
-      syncFromJSONBin({ silent: true });
+    } else if (getDirtyTs() || Date.now() - _lastSyncMs > RESUME_SYNC_MIN_MS) {
+      syncFromCloud({ silent: true });
     }
   });
+  window.addEventListener('pagehide', () => { if (items.length && getDirtyTs()) flushCloudSave(); });
 
   window.addEventListener('scroll', () => {
     $('scrollTopBtn').classList.toggle('visible', window.scrollY > 400);

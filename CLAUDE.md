@@ -14,6 +14,7 @@ Everything lives in `index.html` — HTML, CSS, and JS in one file. Deployed via
 
 Supporting files:
 - `kroger-worker.js` — Cloudflare Worker source for the Kroger/HT CORS proxy
+- `sync-worker.js` — Cloudflare Worker + KV for cross-device sync (replaced JSONBin)
 - `publix-worker.js` — Cloudflare Worker source for the Publix CORS proxy (fallback only)
 - `publix-extension/` — Chrome Extension (Manifest V3) that auto-captures Publix sale data
 - `images/` — Local product images named `{itemId}.jpg` or `{itemId}.png`
@@ -91,15 +92,20 @@ An item is flagged "New" if its first sale is within 45 days of the most recent 
 
 ## Persistence
 
-### JSONBin (cross-device sync)
-- Bin ID: `6a1c7f3cddf5aa59f77c95a9`
-- API key in code (read/write)
-- Stores: `storeTags`, `archived`, `purchases`, `manualSales`, `shipment`
+### Cloud sync — `sync-worker.js` (Cloudflare Worker + KV)
+- Worker: `https://sourcebuddy-sync.natescottsmith.workers.dev/state` (GET / PUT), KV binding `STORE`, secret `SYNC_TOKEN`
+- One JSON document: `tags`, `archived`, `purchases`, `manualSales`, `inboundOverrides`, `weeklyList`, `shipment`, `shipmentFiles`, `wfsInventory`, `wfsInventoryTs`, `editTs`
+- PUT sends `baseEditTs`; Worker returns 409 + current record if the cloud changed — app 3-way merges per item (base = `sa_sync_base` snapshot) and retries
+- A device that never synced (no snapshot) can only add items, never overwrite/delete
+- Saves are debounced 1.5s; resume sync is throttled to once a minute
+- Replaced JSONBin (Oct 2026, free-plan requests exhausted). Last JSONBin version is git tag `jsonbin-version`
 - `storeTags` format: `{ itemId: ["Store Name", ...] }`
 - `manualSales` format: `{ itemId: { stores: string[], expiresMs: number } }` — 7-day expiry
 
 ### localStorage (browser-only, sensitive data)
+- `sourcing_sync_token` — cloud sync token (must match the Worker's `SYNC_TOKEN`)
 - `sourcing_kroger_id` / `sourcing_kroger_sec` — Kroger API credentials
+- `sa_backup` — this device's copy of synced state (offline fallback); `sa_sync_base` — last-synced snapshot; `sa_dirty` — unsynced-edit marker
 - `sourcing_publix_token` — Publix cookie string (manual fallback)
 - `sourcing_publix_filter` — Publix filterQuery (manual fallback)
 - `sourcing_publix_data` — `{ items, ts }` — extension-cached sale items (24h TTL)
@@ -126,7 +132,7 @@ An item is flagged "New" if its first sale is within 45 days of the most recent 
 
 ## Cloudflare Workers
 
-Both workers are deployed to `natescottsmith.workers.dev`:
+Workers are deployed to `natescottsmith.workers.dev` (Kroger, Publix, and `sourcebuddy-sync`):
 
 **kroger-worker.js** — Kroger OAuth proxy
 - Fetches Kroger OAuth token, proxies product search requests
