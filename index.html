@@ -2957,24 +2957,20 @@ const GITHUB_ORDERS_URL    = GITHUB_RAW + '/orders.xlsx';
 const GITHUB_HISTORY_URL   = GITHUB_RAW + '/orders_history.csv';
 
 async function checkGitHubFiles() {
-  const [invOk, ordOk, histOk] = await Promise.all([
+  const [invOk, histOk] = await Promise.all([
     fetch(GITHUB_INVENTORY_URL, { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
-    fetch(GITHUB_ORDERS_URL,    { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
     fetch(GITHUB_HISTORY_URL,   { method: 'HEAD', cache: 'no-cache' }).then(r => r.ok).catch(() => false),
   ]);
+  if (!sbRows && getLocalOrders()) $('sbName').textContent = '☁ Synced orders';
   if (invOk && !wfsRows) {
     $('wfsName').textContent = '☁ Auto-loads from GitHub';
     $('wfsDrop').classList.add('github-ready');
-  }
-  if (ordOk && !sbRows) {
-    $('sbName').textContent = '☁ Auto-loads from GitHub';
-    $('sbDrop').classList.add('github-ready');
   }
   if (histOk && !histRows) {
     $('histName').textContent = '☁ Auto-loads from GitHub';
     $('histDrop').classList.add('github-ready');
   }
-  return { invOk, ordOk, histOk };
+  return { invOk, histOk };
 }
 
 async function fetchGitHubHistory() {
@@ -3009,6 +3005,91 @@ async function fetchGitHubOrders() {
     return out;
   });
   return rows.length ? rows : null;
+}
+
+// ─── Orders sync ──────────────────────────────────────────────────────────────
+// Orders live in the private sync Worker, not GitHub. Only date, item ID, qty and item name
+// are kept — order numbers and customer ship-to details never leave the device.
+const ORDERS_URL    = SYNC_URL.replace(/\/state$/, '/orders');
+const LS_ORDERS_KEY = 'sa_orders';
+
+function toDay(v) {
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const d = new Date(v);
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function compactOrders(rows, uploadedTs = Date.now()) {
+  if (!rows?.length) return null;
+  const { idCol, qtyCol, dateCol, statusCol, nameCol } = salesCols(rows[0]);
+  if (!idCol || !qtyCol || !dateCol) return null;
+  const out = [], names = {};
+  rows.forEach(row => {
+    const id = (row[idCol] || '').trim();
+    if (!id) return;
+    if (CANCELLED_STATUSES.has((row[statusCol] || '').toLowerCase().trim())) return;
+    const qty = num(row[qtyCol]);
+    if (qty <= 0) return;
+    out.push([toDay(row[dateCol] || ''), id, qty]);
+    if (!names[id] && nameCol && row[nameCol]) names[id] = row[nameCol].trim();
+  });
+  return out.length ? { v: 1, uploadedTs, rows: out, names } : null;
+}
+
+function expandOrders(c) {
+  return c.rows.map(([d, id, q]) => ({ order_placed_dt: d, wmt_item_id: id, quantity: String(q), item_name: c.names?.[id] || '' }));
+}
+
+function getLocalOrders() {
+  try { return JSON.parse(localStorage.getItem(LS_ORDERS_KEY)) || null; } catch (_) { return null; }
+}
+function setLocalOrders(c) {
+  try { localStorage.setItem(LS_ORDERS_KEY, JSON.stringify(c)); } catch (_) {}
+}
+
+async function fetchCloudOrders() {
+  const token = syncToken();
+  if (!token) return null;
+  const res = await fetch(ORDERS_URL, { headers: { 'X-Sync-Token': token }, cache: 'no-store', signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()).orders || null;
+}
+
+async function putCloudOrders(c) {
+  const token = syncToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(ORDERS_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Sync-Token': token },
+      body: JSON.stringify({ orders: c }),
+      signal: AbortSignal.timeout(20000),
+    });
+    return res.ok;
+  } catch (e) { console.error('Orders cloud save failed', e); return false; }
+}
+
+// Newest of the cloud copy and this device's copy; re-sends this device's copy if the cloud is behind
+async function loadOrders() {
+  const local = getLocalOrders();
+  let cloud = null, reachable = true;
+  try { cloud = await fetchCloudOrders(); } catch (_) { reachable = false; }
+  if (cloud && (!local || (cloud.uploadedTs || 0) >= (local.uploadedTs || 0))) {
+    setLocalOrders(cloud);
+    return cloud;
+  }
+  if (local) {
+    if (reachable) putCloudOrders(local);
+    return local;
+  }
+  // One-time migration from the old GitHub copy. uploadedTs 0 so any real upload replaces it.
+  const migrated = compactOrders(await fetchGitHubOrders().catch(() => null), 0);
+  if (migrated) {
+    setLocalOrders(migrated);
+    if (reachable) putCloudOrders(migrated);
+  }
+  return migrated;
 }
 
 const LS_BACKUP_KEY = 'sa_backup';
@@ -3968,17 +4049,26 @@ function parseWFSRows(rows, colMap = {}, { useInbound = false } = {}) {
 }
 
 // ─── Sales Data (Seller Center orders or Sellerboard) ────────────────────────
+function salesCols(s) {
+  const wmtIdCol = findCol(s, ['wmt_item_id', 'item_id', 'itemid', 'walmart_item_id']);
+  return {
+    wmtIdCol,
+    idCol:     wmtIdCol || findCol(s, ['sku', 'asin', 'id', 'product_id', 'item']),
+    qtyCol:    findCol(s, ['quantity', 'qty', 'units']),
+    dateCol:   findCol(s, ['order_placed_dt', 'order_date', 'date', 'placed_date']),
+    statusCol: findCol(s, ['order_status', 'status']),
+    nameCol:   findCol(s, ['item_name', 'product_name', 'name', 'title', 'product']),
+    velCol:    findCol(s, ['weekly', 'units_week', 'weekly_sold', 'velocity', 'units_per_week']),
+  };
+}
+const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'returned', 'refunded']);
+
 function parseSalesRows(rows) {
   if (!rows.length) return new Map();
   const s = rows[0];
 
   // Detect format: Seller Center order-level vs pre-aggregated weekly
-  const wmtIdCol   = findCol(s, ['wmt_item_id', 'item_id', 'itemid', 'walmart_item_id']);
-  const qtyCol     = findCol(s, ['quantity', 'qty', 'units']);
-  const dateCol    = findCol(s, ['order_placed_dt', 'order_date', 'date', 'placed_date']);
-  const statusCol  = findCol(s, ['order_status', 'status']);
-  const nameCol    = findCol(s, ['item_name', 'product_name', 'name', 'title', 'product']);
-  const velCol     = findCol(s, ['weekly', 'units_week', 'weekly_sold', 'velocity', 'units_per_week']);
+  const { wmtIdCol, qtyCol, dateCol, statusCol, nameCol, velCol } = salesCols(s);
 
   // If there's a pre-aggregated weekly column, use simple mode
   if (velCol && !dateCol) {
@@ -3996,8 +4086,6 @@ function parseSalesRows(rows) {
   const idCol = wmtIdCol || findCol(s, ['sku', 'asin', 'id', 'product_id', 'item']);
   if (!idCol || !qtyCol) return new Map();
 
-  const CANCELLED = new Set(['cancelled', 'canceled', 'returned', 'refunded']);
-
   const totals = new Map(); // itemId → { units, name, dates[] }
   rows.forEach(row => {
     const id = (row[idCol] || '').trim();
@@ -4005,7 +4093,7 @@ function parseSalesRows(rows) {
 
     // Skip cancelled orders
     const status = (row[statusCol] || '').toLowerCase().trim();
-    if (CANCELLED.has(status)) return;
+    if (CANCELLED_STATUSES.has(status)) return;
 
     const units = num(row[qtyCol]);
     if (units <= 0) return;
@@ -6179,15 +6267,23 @@ async function generate(colMap = {}) {
       _wfsSourceName = '';
     }
 
-    // 3. Sales data — use manual upload, or auto-fetch from GitHub
+    // 3. Sales data — a dropped orders file is synced to the cloud; otherwise use the synced orders
     let velMap = new Map();
     let sbSource = sbRows;
-    if (!sbSource) {
-      setSpinner(true, 'Fetching orders from GitHub…');
-      const fetched = await fetchGitHubOrders().catch(() => null);
-      if (fetched) {
-        sbSource = fetched;
-        $('sbName').textContent = '✓ Loaded from GitHub';
+    if (sbRows) {
+      const compact = compactOrders(sbRows);
+      if (compact) {
+        setLocalOrders(compact);
+        putCloudOrders(compact).then(ok => ok
+          ? toast('Orders synced to cloud ☁️')
+          : toast('Orders saved on this device — they\'ll sync once cloud sync is available', true));
+      }
+    } else {
+      setSpinner(true, 'Loading orders…');
+      const synced = await loadOrders();
+      if (synced) {
+        sbSource = expandOrders(synced);
+        $('sbName').textContent = '☁ Synced orders';
         $('sbDrop').classList.remove('github-ready');
         $('sbDrop').classList.add('loaded');
       }
@@ -6196,7 +6292,7 @@ async function generate(colMap = {}) {
     if (sbSource) {
       velMap = parseSalesRows(sbSource);
       _ordersLatestMs = velMap.latestMs ?? null;
-      _ordersSource   = sbRows ? 'uploaded file' : 'GitHub';
+      _ordersSource   = sbRows ? 'uploaded file' : 'synced';
     }
 
     // 4. Extended history — optional, improves velocity accuracy for slow/established items

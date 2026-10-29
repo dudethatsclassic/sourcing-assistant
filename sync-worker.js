@@ -15,6 +15,8 @@
  *   PUT  /state  { record, baseEditTs }  → { ok, editTs }
  *        409 { error: 'conflict', record } if the stored copy changed since baseEditTs —
  *        the app merges and retries, so a stale device can't overwrite newer edits.
+ *   GET  /orders                         → { orders }   (compact orders: date, item ID, qty — no customer data)
+ *   PUT  /orders { orders }              → { ok }        (latest upload replaces the previous one)
  */
 
 const ALLOWED_ORIGINS = ['https://dudethatsclassic.github.io', 'http://localhost:4400'];
@@ -41,7 +43,23 @@ export default {
       return json({ error: 'bad token' }, 401);
     }
     if (!env.STORE) return json({ error: 'KV binding STORE missing' }, 500);
-    if (new URL(request.url).pathname !== '/state') return json({ error: 'not found' }, 404);
+    const path = new URL(request.url).pathname;
+
+    if (path === '/orders') {
+      if (request.method === 'GET') return json({ orders: await env.STORE.get('orders', 'json') });
+      if (request.method === 'PUT') {
+        const text = await request.text();
+        if (text.length > MAX_BYTES) return json({ error: 'too large' }, 413);
+        let body;
+        try { body = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
+        if (!body || !Array.isArray(body.orders?.rows)) return json({ error: 'missing orders' }, 400);
+        await env.STORE.put('orders', JSON.stringify(body.orders));
+        return json({ ok: true });
+      }
+      return json({ error: 'method not allowed' }, 405);
+    }
+
+    if (path !== '/state') return json({ error: 'not found' }, 404);
 
     if (request.method === 'GET') {
       return json({ record: await env.STORE.get('state', 'json') });
