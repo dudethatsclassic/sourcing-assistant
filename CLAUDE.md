@@ -98,7 +98,7 @@ An item is flagged "New" if its first sale is within 45 days of the most recent 
 - PUT sends `baseEditTs`; Worker returns 409 + current record if the cloud changed — app 3-way merges per item (base = `sa_sync_base` snapshot) and retries
 - A device that never synced (no snapshot) can only add items, never overwrite/delete
 - Saves are debounced 1.5s; resume sync is throttled to once a minute
-- Replaced JSONBin (Oct 2026, free-plan requests exhausted). Last JSONBin version is git tag `jsonbin-version`
+- Replaced JSONBin (Oct 2026, free-plan requests exhausted). Last JSONBin version is git tag `jsonbin-version` — its bin is deleted and key revoked, so that version can't sync anymore
 - `storeTags` format: `{ itemId: ["Store Name", ...] }`
 - `manualSales` format: `{ itemId: { stores: string[], expiresMs: number } }` — 7-day expiry
 
