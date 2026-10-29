@@ -17,6 +17,7 @@
  *        the app merges and retries, so a stale device can't overwrite newer edits.
  *   GET  /orders                         → { orders }   (compact orders: date, item ID, qty — no customer data)
  *   PUT  /orders { orders }              → { ok }        (latest upload replaces the previous one)
+ *   GET  /history  /  PUT /history { history }           (compact 12-month sales history, same rules)
  */
 
 const ALLOWED_ORIGINS = ['https://dudethatsclassic.github.io', 'http://localhost:4400'];
@@ -45,15 +46,16 @@ export default {
     if (!env.STORE) return json({ error: 'KV binding STORE missing' }, 500);
     const path = new URL(request.url).pathname;
 
-    if (path === '/orders') {
-      if (request.method === 'GET') return json({ orders: await env.STORE.get('orders', 'json') });
+    if (path === '/orders' || path === '/history') {
+      const key = path.slice(1);
+      if (request.method === 'GET') return json({ [key]: await env.STORE.get(key, 'json') });
       if (request.method === 'PUT') {
         const text = await request.text();
         if (text.length > MAX_BYTES) return json({ error: 'too large' }, 413);
         let body;
         try { body = JSON.parse(text); } catch { return json({ error: 'bad json' }, 400); }
-        if (!body || !Array.isArray(body.orders?.rows)) return json({ error: 'missing orders' }, 400);
-        await env.STORE.put('orders', JSON.stringify(body.orders));
+        if (!body || !Array.isArray(body[key]?.rows)) return json({ error: `missing ${key}` }, 400);
+        await env.STORE.put(key, JSON.stringify(body[key]));
         return json({ ok: true });
       }
       return json({ error: 'method not allowed' }, 405);

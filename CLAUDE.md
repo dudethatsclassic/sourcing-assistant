@@ -30,13 +30,10 @@ Supporting files:
 | Google Sheet | Item names, buy prices (col F = Cost), sell prices (col J = Sell Price), image URLs | Sheet URL pasted into app |
 | WFS Inventory report XLSX | `currentStock`, `inbound`, GTIN | Drag-drop → synced via the sync Worker (`wfsInventory` in state) |
 | Seller Center orders CSV/XLSX | Velocity (units/week) | Drag-drop → stripped to date/item ID/qty/name → synced via the sync Worker (`/orders`). **Never commit orders to GitHub** — the repo is public and the export has customer ship-to data |
-| Sales Data Insights CSV (optional) | Long-term velocity (52-week) | Drag-drop or auto-load from `data/orders_history.csv` on GitHub |
+| Sales Data Insights CSV (optional) | Long-term velocity (52-week) | Drag-drop → stripped to item ID/units/name → synced via the sync Worker (`/history`) |
 
 ### Auto-load from GitHub
-The app checks `HEAD` on load; if the file exists, the drop zone turns orange and it loads automatically:
-- `data/orders_history.csv`
-
-`data/orders.xlsx` is only read once, as a one-time import when the Worker has no orders yet.
+Nothing loads from GitHub anymore. `data/orders.xlsx` / `data/orders_history.csv` are only read as a one-time import when the Worker has no copy yet (both are removed from the repo). `data/` is gitignored.
 
 ### Computed fields per item
 - `weekly` — velocity (units/week). Uses higher of long-term vs 90-day to catch trending items
@@ -95,7 +92,7 @@ An item is flagged "New" if its first sale is within 45 days of the most recent 
 ### Cloud sync — `sync-worker.js` (Cloudflare Worker + KV)
 - Worker: `https://sourcebuddy-sync.natescottsmith.workers.dev/state` (GET / PUT), KV binding `STORE`, secret `SYNC_TOKEN`
 - KV key `state` — one JSON document: `tags`, `archived`, `purchases`, `manualSales`, `inboundOverrides`, `weeklyList`, `shipment`, `shipmentFiles`, `wfsInventory`, `wfsInventoryTs`, `editTs`
-- KV key `orders` — `{ v, uploadedTs, rows: [[YYYY-MM-DD, itemId, qty]], names: { itemId: name } }` via `GET/PUT /orders` (latest upload wins; cancelled orders dropped). Cached per device in `sa_orders`
+- KV keys `orders` and `history` (same shape rules; history is `{ kind: 'insights', rows: [[itemId, units, name]] }`) — `{ v, uploadedTs, rows: [[YYYY-MM-DD, itemId, qty]], names: { itemId: name } }` via `GET/PUT /orders` (latest upload wins; cancelled orders dropped). Cached per device in `sa_orders`
 - PUT sends `baseEditTs`; Worker returns 409 + current record if the cloud changed — app 3-way merges per item (base = `sa_sync_base` snapshot) and retries
 - A device that never synced (no snapshot) can only add items, never overwrite/delete
 - Saves are debounced 1.5s; resume sync is throttled to once a minute
