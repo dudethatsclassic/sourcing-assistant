@@ -18,6 +18,9 @@
  *   GET  /orders                         → { orders }   (compact orders: date, item ID, qty — no customer data)
  *   PUT  /orders { orders }              → { ok }        (latest upload replaces the previous one)
  *   GET  /history  /  PUT /history { history }           (compact 12-month sales history, same rules)
+ *   GET  /sheet?gid=<tab id>             → CSV of one Google Sheet tab, read through the sheet's
+ *        Apps Script web app so the sheet itself can stay private. Needs secrets
+ *        SHEET_SCRIPT_URL (the web app /exec URL) and SHEET_KEY (same value as the script's property).
  */
 
 const ALLOWED_ORIGINS = ['https://dudethatsclassic.github.io', 'http://localhost:4400'];
@@ -59,6 +62,20 @@ export default {
         return json({ ok: true });
       }
       return json({ error: 'method not allowed' }, 405);
+    }
+
+    if (path === '/sheet') {
+      if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+      if (!env.SHEET_SCRIPT_URL || !env.SHEET_KEY) return json({ error: 'sheet not configured' }, 501);
+      const gid = new URL(request.url).searchParams.get('gid') || '';
+      if (!/^\d{1,12}$/.test(gid)) return json({ error: 'bad gid' }, 400);
+      const upstream = await fetch(`${env.SHEET_SCRIPT_URL}?key=${encodeURIComponent(env.SHEET_KEY)}&gid=${gid}`);
+      const text = await upstream.text();
+      if (text.startsWith('ERROR:')) return json({ error: text.slice(6) }, 502);
+      if (!upstream.ok || text.trimStart().startsWith('<')) {
+        return json({ error: 'sheet script unavailable — check the web app is deployed with access "Anyone"' }, 502);
+      }
+      return new Response(text, { headers: { ...cors, 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store' } });
     }
 
     if (path !== '/state') return json({ error: 'not found' }, 404);

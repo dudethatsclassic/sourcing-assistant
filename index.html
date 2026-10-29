@@ -2613,8 +2613,8 @@
 
     <div class="grid-2" style="margin-bottom:14px">
       <div class="field">
-        <label>Google Sheet URL or ID</label>
-        <input type="text" id="sheetUrl" placeholder="Paste URL or Sheet ID" autocomplete="off" spellcheck="false">
+        <label>Google Sheet tab (optional)</label>
+        <input type="text" id="sheetUrl" placeholder="Optional — loads WFS 2026 via sync. Paste a tab's URL to use another tab" autocomplete="off" spellcheck="false">
       </div>
       <div class="field">
         <label>Weeks of Stock to Keep</label>
@@ -3785,17 +3785,15 @@ function savePrefs() {
   } catch (_) {}
 }
 
-const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1_1JjkqHvl2Qh5Toa2GLQTR-aHKjbgWyQ7zTf85mRPMM/edit?gid=1570573297#gid=1570573297';
+const DEFAULT_SHEET_GID = '1570573297'; // "WFS 2026" tab — paste a tab's URL in setup to use a different one
 
 function loadPrefs() {
   try {
-    const url = localStorage.getItem('sa_sheet') || DEFAULT_SHEET_URL;
+    const url = localStorage.getItem('sa_sheet');
     const wks = localStorage.getItem('sa_weeks');
     if (url) $('sheetUrl').value = url;
     if (wks) $('weeksTarget').value = wks;
-  } catch (_) {
-    $('sheetUrl').value = DEFAULT_SHEET_URL;
-  }
+  } catch (_) {}
 }
 
 // ─── CSV Parser ───────────────────────────────────────────────────────────────
@@ -3921,7 +3919,21 @@ function extractGid(input) {
   return m ? m[1] : null;
 }
 
+// The sheet is private; it's read through the sync Worker → the sheet's Apps Script.
+// The public export link is only a fallback for before the Worker's sheet access is set up.
 async function fetchSheet(sheetId, gid) {
+  const token = syncToken();
+  if (token) {
+    const res = await fetch(`${SYNC_BASE}/sheet?gid=${encodeURIComponent(gid || DEFAULT_SHEET_GID)}`, {
+      headers: { 'X-Sync-Token': token }, cache: 'no-store', signal: AbortSignal.timeout(45000),
+    });
+    if (res.ok) return res.text();
+    if (res.status !== 501 || !sheetId) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Couldn't load the Google Sheet through sync (${err.error || 'HTTP ' + res.status}).`);
+    }
+  }
+  if (!sheetId) throw new Error('Add your sync token in ⚙️ Settings to load the Google Sheet.');
   let url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
   if (gid) url += `&gid=${gid}`;
   const res = await fetch(url);
@@ -6202,8 +6214,8 @@ async function generate(colMap = {}) {
   const sheetInput  = $('sheetUrl').value.trim();
   const weeksTarget = parseInt($('weeksTarget').value, 10) || 4;
 
-  if (!sheetInput && !wfsRows && !sbRows) {
-    toast('Add a Google Sheet URL and/or upload CSV files first.', true);
+  if (!sheetInput && !wfsRows && !sbRows && !syncToken()) {
+    toast('Add your sync token in ⚙️ Settings, or upload CSV files first.', true);
     return;
   }
 
@@ -6217,10 +6229,10 @@ async function generate(colMap = {}) {
   try {
     // 1. Google Sheet
     let sheetMap = new Map();
-    if (sheetInput) {
-      const sheetId = extractSheetId(sheetInput);
-      if (!sheetId) throw new Error('Invalid Google Sheet URL or ID.');
-      const gid = extractGid(sheetInput);
+    const sheetId = sheetInput ? extractSheetId(sheetInput) : null;
+    if (sheetInput && !sheetId) throw new Error('Invalid Google Sheet URL or ID.');
+    if (sheetId || syncToken()) {
+      const gid = (sheetInput && extractGid(sheetInput)) || DEFAULT_SHEET_GID;
       setSpinner(true, 'Fetching Google Sheet…');
       const csv = await fetchSheet(sheetId, gid);
       sheetMap = parseSheetCSVText(csv);
