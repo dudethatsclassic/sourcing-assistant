@@ -27,7 +27,7 @@ Supporting files:
 ### Inputs (three CSVs + one Google Sheet)
 | Source | What it provides | How it gets in |
 |--------|-----------------|----------------|
-| Google Sheet | Item names, buy prices (col F = Cost), sell prices (col J = Sell Price), image URLs | Sheet URL pasted into app |
+| Google Sheet | Item names, buy prices (col F = Cost), sell prices (col J = Sell Price), image URLs | **Private (Restricted sharing).** Read via sync Worker `/sheet?gid=` → Apps Script web app bound to the sheet (`doGet`, checks script property `SHEET_KEY`). Default tab `DEFAULT_SHEET_GID` = WFS 2026; the setup field takes a tab URL to switch tabs |
 | WFS Inventory report XLSX | `currentStock`, `inbound`, GTIN | Drag-drop → synced via the sync Worker (`wfsInventory` in state) |
 | Seller Center orders CSV/XLSX | Velocity (units/week) | Drag-drop → stripped to date/item ID/qty/name → synced via the sync Worker (`/orders`). **Never commit orders to GitHub** — the repo is public and the export has customer ship-to data |
 | Sales Data Insights CSV (optional) | Long-term velocity (52-week) | Drag-drop → stripped to item ID/units/name → synced via the sync Worker (`/history`) |
@@ -90,7 +90,7 @@ An item is flagged "New" if its first sale is within 45 days of the most recent 
 ## Persistence
 
 ### Cloud sync — `sync-worker.js` (Cloudflare Worker + KV)
-- Worker: `https://sourcebuddy-sync.natescottsmith.workers.dev/state` (GET / PUT), KV binding `STORE`, secret `SYNC_TOKEN`
+- Worker: `https://sourcebuddy-sync.natescottsmith.workers.dev/state` (GET / PUT), KV binding `STORE`, secrets `SYNC_TOKEN`, `SHEET_SCRIPT_URL` (Apps Script `/exec` URL), `SHEET_KEY` (must match the script property)
 - KV key `state` — one JSON document: `tags`, `archived`, `purchases`, `manualSales`, `inboundOverrides`, `weeklyList`, `shipment`, `shipmentFiles`, `wfsInventory`, `wfsInventoryTs`, `editTs`
 - KV keys `orders` and `history` (same shape rules; history is `{ kind: 'insights', rows: [[itemId, units, name]] }`) — `{ v, uploadedTs, rows: [[YYYY-MM-DD, itemId, qty]], names: { itemId: name } }` via `GET/PUT /orders` (latest upload wins; cancelled orders dropped). Cached per device in `sa_orders`
 - PUT sends `baseEditTs`; Worker returns 409 + current record if the cloud changed — app 3-way merges per item (base = `sa_sync_base` snapshot) and retries
