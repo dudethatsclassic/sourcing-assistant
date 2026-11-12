@@ -354,6 +354,7 @@
     .inv-source-row strong { color: var(--text); font-weight: 600; }
     .inv-source-row > div + div { margin-top: 2px; }
     .inv-source-stale { color: var(--orange); font-weight: 600; }
+    .bb-warn { width: 100%; font-size: 11px; font-weight: 600; color: var(--orange); margin-top: 2px; }
 
     /* ── Toolbar ── */
     .toolbar {
@@ -2663,6 +2664,16 @@
       </div>
     </div>
 
+    <div class="field" style="margin-top:14px">
+      <label>Buy Box Report <span style="font-weight:400;color:var(--muted-light)">(optional — Seller Center report with Buybox Item Price + Buybox Eligible)</span></label>
+      <div class="drop-zone" id="bbDrop" style="min-height:72px">
+        <input type="file" accept=".csv,.xlsx" id="bbFile">
+        <div class="drop-icon">🏷️</div>
+        <div class="drop-label">Drop CSV or Excel file</div>
+        <div class="drop-name" id="bbName"></div>
+      </div>
+    </div>
+
     <div class="actions">
       <button class="btn btn-primary" id="generateBtn">Generate Sourcing List</button>
       <button class="btn btn-ghost" id="clearBtn">Clear</button>
@@ -3129,6 +3140,8 @@ function saveLocal() {
       weeklyList,
       wfsInventory: hasInv ? wfsInventoryData : (prev?.wfsInventory || {}),
       wfsInventoryTs: hasInv ? wfsInventoryTs : (prev?.wfsInventoryTs || null),
+      buyBox: buyBoxData,
+      buyBoxTs,
     }));
   } catch (_) {}
 }
@@ -3204,6 +3217,10 @@ function mergeRecords(base, local, remote) {
     out.wfsInventory   = local.wfsInventory;
     out.wfsInventoryTs = local.wfsInventoryTs;
   }
+  if ((local?.buyBoxTs || 0) > (remote?.buyBoxTs || 0)) {
+    out.buyBox   = local.buyBox;
+    out.buyBoxTs = local.buyBoxTs;
+  }
   return out;
 }
 
@@ -3236,6 +3253,8 @@ function normalizeRecord(r = {}) {
     weeklyList:     r.weeklyList     || {},
     wfsInventory:   r.wfsInventory   || {},
     wfsInventoryTs: r.wfsInventoryTs || null,
+    buyBox:         r.buyBox         || {},
+    buyBoxTs:       r.buyBoxTs       || null,
     editTs:         r.editTs         || 0,
   };
 }
@@ -3351,7 +3370,7 @@ async function pushLocalState() {
 }
 
 function currentPayload() {
-  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, manualSales, inboundOverrides, weeklyList, wfsInventory: wfsInventoryData, wfsInventoryTs };
+  return { tags: storeTags, archived: [...archivedIds], purchases, shipment: Object.fromEntries(shipNameMap), shipmentFiles: shipFileMap, manualSales, inboundOverrides, weeklyList, wfsInventory: wfsInventoryData, wfsInventoryTs, buyBox: buyBoxData, buyBoxTs };
 }
 
 // Replace in-memory synced state and refresh the UI
@@ -3372,6 +3391,10 @@ function applyState(d) {
   if (Object.keys(d.wfsInventory || {}).length) {
     wfsInventoryData = d.wfsInventory;
     wfsInventoryTs   = d.wfsInventoryTs;
+  }
+  if (Object.keys(d.buyBox || {}).length) {
+    buyBoxData = d.buyBox;
+    buyBoxTs   = d.buyBoxTs;
   }
   wlQtys = {};
   saveLocal();
@@ -3674,6 +3697,9 @@ let _wfsSourceName  = '';
 let _wfsSourceTs    = null;
 let _ordersLatestMs = null;   // newest order date in the sales file
 let _ordersSource   = '';
+let buyBoxRows      = null;   // dropped buy box report rows (this session)
+let buyBoxData      = {};     // { itemId: [buyBoxPrice, 1 | eligibility code] } — synced
+let buyBoxTs        = null;
 let wfsInventoryData = {};    // compact {itemId:{s,i}} — synced to cloud for cross-device use
 let wfsInventoryTs   = null;  // timestamp of last xlsx upload
 let sbRows   = null;
@@ -3891,6 +3917,12 @@ function renderInvSourceBadge() {
     } else {
       lines.push('🔗 WFS Inventory · loaded from GitHub');
     }
+  }
+  if (buyBoxTs) {
+    const bbDays = Math.floor((Date.now() - buyBoxTs) / 86400000);
+    lines.push(bbDays > 3
+      ? `<span class="inv-source-stale">⚠ Buy box prices are ${bbDays} days old · upload a fresh report</span>`
+      : `🏷️ Buy box prices · uploaded ${formatAge(buyBoxTs)} ago`);
   }
   if (_ordersLatestMs) {
     // Order dates are date-only strings parsed as UTC midnight — format in UTC so the day doesn't shift
@@ -4535,6 +4567,7 @@ function renderCard(item, delay = 0) {
             </div>
           </div>
         ` : ''}
+        ${buyBoxRowHtml(item.itemId)}
       </div>
       ${saleBadgeHtml(item.itemId)}
       ${manualSaleToggle(item.itemId, false)}
@@ -4545,6 +4578,41 @@ function renderCard(item, delay = 0) {
       </div>
     </div>`;
   return el;
+}
+
+// ─── Buy box ──────────────────────────────────────────────────────────────────
+// Seller Center report columns: Item Id, Buybox Item Price, Buybox Eligible (COMPETITIVE /
+// NON_COMPETITIVE_PRICE_CEILING / …). Stored compactly; eligibility 1 = competitive.
+function parseBuyBoxRows(rows) {
+  if (!rows?.length) return null;
+  const s = rows[0];
+  const idCol    = findCol(s, ['item_id', 'itemid']);
+  const priceCol = findCol(s, ['buybox_item_price', 'buy_box_item_price', 'buybox_price', 'buy_box_price']);
+  const eligCol  = findCol(s, ['buybox_eligible', 'buy_box_eligible']);
+  if (!idCol || !priceCol) return null;
+  const out = {};
+  rows.forEach(r => {
+    const id = String(r[idCol] || '').trim().replace(/\.0$/, '');
+    const price = parseFloat(String(r[priceCol] || '').replace(/[$,]/g, ''));
+    if (!id || !(price > 0)) return;
+    const elig = String(r[eligCol] || '').trim().toUpperCase();
+    out[id] = [Math.round(price * 100) / 100, !elig || elig === 'COMPETITIVE' ? 1 : elig];
+  });
+  return Object.keys(out).length ? out : null;
+}
+
+function buyBoxRowHtml(itemId) {
+  const bb = buyBoxData[itemId];
+  if (!bb) return '';
+  const [price, elig] = bb;
+  const warn = elig === 1 ? ''
+    : elig === 'NON_COMPETITIVE_PRICE_CEILING' ? '<div class="bb-warn">⚠ Your price is above Walmart\'s price ceiling — can\'t win the buy box</div>'
+    : '<div class="bb-warn">⚠ Not eligible for the buy box</div>';
+  return `
+    <div style="width:100%;margin-top:4px;display:flex;align-items:center;justify-content:space-between">
+      <div class="price-label">Buy Box</div>
+      <div class="price-value">${fmtPrice(price)}</div>
+    </div>${warn}`;
 }
 
 // ─── Manual Sale helpers ──────────────────────────────────────────────────────
@@ -6224,7 +6292,7 @@ async function generate(colMap = {}) {
   $('wfsMapper').style.display = 'none';
 
   // Wait for any in-flight file parses (user may drop and immediately click Generate)
-  await Promise.all(['wfsDrop', 'sbDrop', 'histDrop'].map(id => $(`${id}`) ?.__parsePending).filter(Boolean));
+  await Promise.all(['wfsDrop', 'sbDrop', 'histDrop', 'bbDrop'].map(id => $(`${id}`) ?.__parsePending).filter(Boolean));
 
   try {
     // 1. Google Sheet
@@ -6354,6 +6422,17 @@ async function generate(colMap = {}) {
     manualSales      = storeData.manualSales || {};
     inboundOverrides = storeData.inboundOverrides || {};
     weeklyList       = storeData.weeklyList || {};
+    let buyBoxJustUploaded = false;
+    const droppedBuyBox = buyBoxRows && parseBuyBoxRows(buyBoxRows);
+    if (buyBoxRows && !droppedBuyBox) toast('Couldn\'t find Buybox Item Price / Item Id columns in that buy box file', true);
+    if (droppedBuyBox) {
+      buyBoxData = droppedBuyBox;
+      buyBoxTs   = Date.now();
+      buyBoxJustUploaded = true;
+    } else {
+      buyBoxData = storeData.buyBox || {};
+      buyBoxTs   = storeData.buyBoxTs || null;
+    }
     if (storeData._synced) setSnapshot(storeData._synced);
     if (!storeData.offline) _lastSyncMs = Date.now();
     saveLocal();
@@ -6386,11 +6465,12 @@ async function generate(colMap = {}) {
     // Uses Math.max so xlsx inbound isn't double-counted — fills gaps for new items the xlsx hasn't caught yet.
     if (shipNameMap.size) applyShipmentInbound(items, shipNameMap, wfsNameToId);
 
-    if (wfsJustUploaded) {
+    if (wfsJustUploaded || buyBoxJustUploaded) {
+      const what = [wfsJustUploaded && 'WFS inventory', buyBoxJustUploaded && 'Buy box prices'].filter(Boolean).join(' & ');
       queueCloudSave();
       flushCloudSave().then(ok => ok
-        ? toast('WFS inventory synced to cloud ☁️')
-        : toast('Inventory saved on this device — it will sync once cloud sync is available', true));
+        ? toast(`${what} synced to cloud ☁️`)
+        : toast(`${what} saved on this device — will sync once cloud sync is available`, true));
     }
 
     // Show results, collapse setup panel
@@ -6507,15 +6587,16 @@ function clearAll() {
   wfsRows  = null;
   sbRows   = null;
   histRows = null;
+  buyBoxRows = null;
   items    = [];
   wfsColMap = {};
   _wfsSourceType = null;
   _ordersLatestMs = null;
   renderInvSourceBadge();
 
-  ['wfsFile', 'sbFile', 'histFile', 'shipFile'].forEach(id => { $(id).value = ''; });
-  ['wfsName', 'sbName', 'histName', 'shipName'].forEach(id => { $(id).textContent = ''; });
-  ['wfsDrop', 'sbDrop', 'histDrop', 'shipDrop'].forEach(id => { $(id).classList.remove('loaded'); });
+  ['wfsFile', 'sbFile', 'histFile', 'shipFile', 'bbFile'].forEach(id => { $(id).value = ''; });
+  ['wfsName', 'sbName', 'histName', 'shipName', 'bbName'].forEach(id => { $(id).textContent = ''; });
+  ['wfsDrop', 'sbDrop', 'histDrop', 'shipDrop', 'bbDrop'].forEach(id => { $(id).classList.remove('loaded'); });
   shipNameMap = new Map();
   saleMap = {};
 
@@ -6544,6 +6625,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDrop('sbDrop', 'sbFile', 'sbName', rows => {
     sbRows = rows;
     $('sbDrop').classList.remove('github-ready');
+  });
+  setupDrop('bbDrop', 'bbFile', 'bbName', rows => {
+    buyBoxRows = rows;
   });
   setupDrop('histDrop', 'histFile', 'histName', rows => {
     histRows = rows;
