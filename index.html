@@ -1920,6 +1920,8 @@
       width: 100%;
       max-width: 600px;
       max-height: 90vh;
+      /* iOS: vh ignores Safari's toolbars, which pushed the header (and Done) off-screen on long lists */
+      max-height: min(90dvh, calc(100% - 24px));
       display: flex;
       flex-direction: column;
       transform: translateY(100%);
@@ -1942,14 +1944,15 @@
 
     .weekly-list-header {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 10px;
       padding: 18px 20px 14px;
       border-bottom: 1px solid var(--border-light);
       flex-shrink: 0;
     }
-    .weekly-list-title { font-size: 17px; font-weight: 700; flex: 1; }
-    .wl-header-actions { display: flex; gap: 8px; }
+    .weekly-list-title { font-size: 17px; font-weight: 700; flex: 1; white-space: nowrap; }
+    .wl-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
     .wl-copy-btn {
       display: inline-flex;
       align-items: center;
@@ -2145,6 +2148,7 @@
       width: 100%;
       max-width: 600px;
       max-height: 90vh;
+      max-height: min(90dvh, calc(100% - 24px));
       display: flex;
       flex-direction: column;
       transform: translateY(100%);
@@ -2337,7 +2341,7 @@
       border-radius: 16px 16px 0 0;
       padding: 20px 20px 40px;
       width: 100%; max-width: 500px;
-      max-height: 80vh; overflow-y: auto; overscroll-behavior: contain;
+      max-height: 80vh; max-height: min(80dvh, calc(100% - 24px)); overflow-y: auto; overscroll-behavior: contain;
     }
     .wl-detail-top {
       display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px;
